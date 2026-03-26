@@ -8,12 +8,16 @@ import env from './config/env.js';
 import routes from './routes/index.js';
 import { errorConverter, errorHandler } from './middlewares/error.middleware.js';
 import ApiError from './utils/ApiError.js';
+import { clerkMiddleware } from '@clerk/express';
+import webhookRoutes from './routes/webhook.route.js';
 
 const app = express();
 
 app.use(morgan('dev'));
-
 app.use(helmet());
+
+app.use('/api/v1/webhooks', webhookRoutes);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(compression());
@@ -21,6 +25,8 @@ app.use(cors({
   origin: env.corsOrigin,
   credentials: true
 }));
+
+app.use(clerkMiddleware());
 
 app.use('/api/v1', routes);
 
