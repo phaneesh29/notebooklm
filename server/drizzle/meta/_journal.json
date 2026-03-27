@@ -15,6 +15,13 @@
       "when": 1774539496004,
       "tag": "0001_pretty_sleeper",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774615293612,
+      "tag": "0002_panoramic_forgotten_one",
+      "breakpoints": true
     }
   ]
 }

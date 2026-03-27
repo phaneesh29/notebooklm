@@ -1,6 +1,6 @@
 import httpStatus from 'http-status';
-import { eq } from 'drizzle-orm';
-import { requireAuth } from '@clerk/express';
+import { eq, sql } from 'drizzle-orm';
+import { getAuth } from '@clerk/express';
 import { db } from '../db/index.js';
 import { users } from '../db/schema.js';
 import ApiError from '../utils/ApiError.js';
@@ -8,13 +8,21 @@ import ApiResponse from '../utils/ApiResponse.js';
 import { encrypt } from '../utils/encryption.js';
 
 export const getMe = async (req, res) => {
-  const { userId } = req.auth;
+  const { userId } = getAuth(req);
 
   if (!userId) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'You must be logged in');
   }
 
-  const [user] = await db.select().from(users).where(eq(users.clerkId, userId)).limit(1);
+  const [user] = await db.select({
+    id: users.id,
+    clerkId: users.clerkId,
+    email: users.email,
+    username: users.username,
+    createdAt: users.createdAt,
+    updatedAt: users.updatedAt,
+    hasApiKey: sql`${users.apiKeyEncrypted} IS NOT NULL`.as('hasApiKey'),
+  }).from(users).where(eq(users.clerkId, userId)).limit(1);
 
   if (!user) {
     throw new ApiError(httpStatus.NOT_FOUND, 'User profile not found in database');
@@ -24,7 +32,7 @@ export const getMe = async (req, res) => {
 };
 
 export const updateApiKey = async (req, res) => {
-  const { userId } = req.auth;
+  const { userId } = getAuth(req);
   const { apiKey } = req.body;
 
   if (!userId) {

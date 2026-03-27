@@ -25,7 +25,12 @@ export const clerkWebhookHandler = async (req, res) => {
   const payload = req.body;
   const body = payload.toString('utf8');
 
-  const wh = new Webhook(WEBHOOK_SECRET);
+  let wh;
+  try {
+    wh = new Webhook(WEBHOOK_SECRET.trim());
+  } catch (err) {
+    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, `Webhook secret error: ${err.message}`);
+  }
 
   let evt;
 

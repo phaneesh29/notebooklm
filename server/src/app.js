@@ -9,6 +9,7 @@ import routes from './routes/index.js';
 import { errorConverter, errorHandler } from './middlewares/error.middleware.js';
 import ApiError from './utils/ApiError.js';
 import { clerkMiddleware } from '@clerk/express';
+import { globalLimiter } from './middlewares/rateLimiter.js';
 import webhookRoutes from './routes/webhook.route.js';
 
 const app = express();
@@ -28,7 +29,7 @@ app.use(cors({
 
 app.use(clerkMiddleware());
 
-app.use('/api/v1', routes);
+app.use('/api/v1', globalLimiter, routes);
 
 app.use((req, res, next) => {
   next(new ApiError(httpStatus.NOT_FOUND, 'Not found'));
