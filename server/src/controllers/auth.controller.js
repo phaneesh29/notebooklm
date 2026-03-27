@@ -6,6 +6,8 @@ import { users } from '../db/schema.js';
 import ApiError from '../utils/ApiError.js';
 import ApiResponse from '../utils/ApiResponse.js';
 import { encrypt } from '../utils/encryption.js';
+import { updateApiKeySchema } from '../schemas/auth.schema.js';
+import { validateWithSchema } from '../utils/validateSchema.js';
 
 export const getMe = async (req, res) => {
   const { userId } = getAuth(req);
@@ -33,14 +35,12 @@ export const getMe = async (req, res) => {
 
 export const updateApiKey = async (req, res) => {
   const { userId } = getAuth(req);
-  const { apiKey } = req.body;
 
   if (!userId) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'You must be logged in');
   }
-  if (!apiKey) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'apiKey is required in the JSON body');
-  }
+
+  const { apiKey } = validateWithSchema(updateApiKeySchema, req.body);
 
   const encryptedKey = encrypt(apiKey);
 

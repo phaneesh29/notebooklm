@@ -27,7 +27,8 @@
     "http-status": "^2.1.0",
     "morgan": "^1.10.1",
     "pg": "^8.20.0",
-    "svix": "^1.89.0"
+    "svix": "^1.89.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "drizzle-kit": "^0.31.10",
