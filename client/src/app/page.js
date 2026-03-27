@@ -4,38 +4,42 @@ import Link from 'next/link';
 import { SignInButton, UserButton, useAuth } from '@clerk/nextjs';
 import { useEffect, useState } from 'react';
 import {
+  AlertTriangle,
   ArrowRight,
   Bot,
   Brain,
   FolderKanban,
   KeyRound,
   LayoutDashboard,
-  LoaderCircle,
   Plus,
   ShieldCheck,
   Sparkles,
   Trash2,
 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import { apiRequest } from '@/lib/api';
 
 const dashboardHighlights = [
   {
-    title: 'Structured research',
-    description: 'Separate work by theme, course, or client so context stays clean as the product grows.',
+    title: 'Source-based workspaces',
+    description: 'Create focused spaces for a topic, class, client, or project before adding any material.',
     icon: FolderKanban,
   },
   {
-    title: 'Secure model access',
-    description: 'Authentication and API key management remain behind validated server-side routes.',
+    title: 'Multi-format input',
+    description: 'Bring in YouTube links, web pages, PDFs, DOCX files, and TXT notes so the model works from real source material.',
     icon: ShieldCheck,
   },
   {
-    title: 'Operator speed',
-    description: 'Fast create flows, clear status, and polished workspace surfaces reduce friction.',
+    title: 'Explainable answers',
+    description: 'Ask the LLM to summarize, explain, compare, and clarify what your uploaded sources actually say.',
     icon: Sparkles,
   },
 ];
@@ -133,7 +137,14 @@ export default function Home() {
   };
 
   if (!isLoaded) {
-    return <div className="flex min-h-screen items-center justify-center">Loading...</div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="w-full max-w-xl space-y-4">
+          <Skeleton className="h-12 w-full rounded-2xl" />
+          <Skeleton className="h-48 w-full rounded-[2rem]" />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -150,10 +161,10 @@ export default function Home() {
                   </div>
                   <div className="space-y-4">
                     <h1 className="max-w-3xl text-4xl font-semibold tracking-[-0.05em] sm:text-5xl lg:text-6xl">
-                      Organize every notebook stream before the first document lands.
+                      Turn links and files into a mini NotebookLM-style workspace.
                     </h1>
                     <p className="max-w-2xl text-base leading-7 text-zinc-600 dark:text-zinc-300 sm:text-lg">
-                      NotebookLM gives you a clean operating surface for grouped research, protected access, and future conversations built around real structure.
+                      Upload a YouTube link, web link, PDF, DOCX, or TXT file, then let the LLM explain the content in simple language, answer questions, and keep everything organized by workspace.
                     </p>
                   </div>
                   <div className="flex flex-col gap-3 sm:flex-row">
@@ -198,23 +209,29 @@ export default function Home() {
                 <div className="grid gap-8 px-6 py-6 lg:grid-cols-[1.2fr_0.8fr] lg:px-8 lg:py-8">
                   <div className="space-y-6">
                     <div className="flex flex-wrap items-center justify-between gap-4">
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-3 text-sm text-zinc-500 dark:text-zinc-400">
-                          <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-zinc-950 text-white shadow-sm dark:bg-white dark:text-zinc-950">
-                            <Bot className="h-4 w-4" />
-                          </span>
-                          <span className="font-medium tracking-[0.2em] uppercase">Research Command Center</span>
-                        </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3 text-sm text-zinc-500 dark:text-zinc-400">
+                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-zinc-950 text-white shadow-sm dark:bg-white dark:text-zinc-950">
+                          <Bot className="h-4 w-4" />
+                        </span>
+                        <span className="font-medium tracking-[0.2em] uppercase">Research Command Center</span>
                       </div>
-                      <UserButton appearance={{ elements: { userButtonAvatarBox: 'h-11 w-11 ring-2 ring-white/80 shadow-sm' } }} />
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant={profile?.hasApiKey ? 'success' : 'warning'}>
+                          {profile?.hasApiKey ? 'API key connected' : 'API setup needed'}
+                        </Badge>
+                        <Badge variant="secondary">{groups.length} groups</Badge>
+                      </div>
                     </div>
+                    <UserButton appearance={{ elements: { userButtonAvatarBox: 'h-11 w-11 ring-2 ring-white/80 shadow-sm' } }} />
+                  </div>
 
                     <div className="space-y-4">
                       <h1 className="max-w-3xl text-4xl font-semibold tracking-[-0.05em] sm:text-5xl">
-                        Build, review, and steer your groups from one place.
+                        Build source collections the model can actually explain.
                       </h1>
                       <p className="max-w-2xl text-base leading-7 text-zinc-600 dark:text-zinc-300">
-                        The main dashboard now acts like your workspace home: status on the right, creation flow up front, and every group visible without leaving the page.
+                        Each group is a mini research notebook where users can add videos, web pages, PDFs, DOCX files, and TXT documents, then ask the LLM to break them down clearly.
                       </p>
                     </div>
 
@@ -250,9 +267,9 @@ export default function Home() {
                     <CardContent className="space-y-0 pb-5 text-sm text-zinc-600 dark:text-zinc-300">
                       <div className="flex items-center justify-between border-t border-zinc-200/80 py-3 dark:border-white/10">
                         <span>Gemini API key</span>
-                        <span className={profile?.hasApiKey ? 'font-medium text-emerald-600 dark:text-emerald-400' : 'font-medium text-amber-600 dark:text-amber-400'}>
+                        <Badge variant={profile?.hasApiKey ? 'success' : 'warning'}>
                           {profile?.hasApiKey ? 'Connected' : 'Setup required'}
-                        </span>
+                        </Badge>
                       </div>
                       <div className="flex items-center justify-between border-t border-zinc-200/80 py-3 dark:border-white/10">
                         <span>Groups</span>
@@ -266,7 +283,7 @@ export default function Home() {
                       </div>
                       <div className="flex items-center justify-between border-t border-zinc-200/80 py-3 dark:border-white/10">
                         <span>Workspace health</span>
-                        <span className="font-medium text-zinc-900 dark:text-zinc-100">Operational</span>
+                        <Badge variant="secondary">Operational</Badge>
                       </div>
                     </CardContent>
                   </Card>
@@ -284,7 +301,7 @@ export default function Home() {
                     </div>
                     <CardTitle className="text-xl font-semibold">Create a group</CardTitle>
                     <CardDescription>
-                      Start a new workspace for notes, documents, and future conversations without leaving the dashboard.
+                      Start a workspace for one topic, then add sources the LLM can read, explain, and answer questions about.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4 pb-6">
@@ -300,21 +317,22 @@ export default function Home() {
                         {isCreatingGroup ? 'Creating group...' : 'Create Group'}
                       </Button>
                     </form>
+                    <Separator />
 
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl border border-zinc-200/80 bg-zinc-50/80 p-4 dark:border-white/10 dark:bg-white/5">
                         <div className="mb-2 inline-flex rounded-xl bg-sky-500/10 p-2 text-sky-600 dark:text-sky-400">
                           <Brain className="h-4 w-4" />
                         </div>
-                        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Topic-first structure</p>
-                        <p className="mt-1 text-xs leading-5 text-zinc-600 dark:text-zinc-300">Keep sources and chats grouped around the work they belong to.</p>
+                        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Source-ready groups</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-600 dark:text-zinc-300">Keep every link, file, and follow-up question tied to the topic it belongs to.</p>
                       </div>
                       <div className="rounded-2xl border border-zinc-200/80 bg-zinc-50/80 p-4 dark:border-white/10 dark:bg-white/5">
                         <div className="mb-2 inline-flex rounded-xl bg-emerald-500/10 p-2 text-emerald-600 dark:text-emerald-400">
                           <KeyRound className="h-4 w-4" />
                         </div>
-                        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Ready for scale</p>
-                        <p className="mt-1 text-xs leading-5 text-zinc-600 dark:text-zinc-300">Your dashboard now behaves like a real workspace, not a test screen.</p>
+                        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Clear explanations</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-600 dark:text-zinc-300">Help users move from raw source material to understandable answers in one place.</p>
                       </div>
                     </div>
                   </CardContent>
@@ -325,7 +343,7 @@ export default function Home() {
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <CardTitle className="text-xl font-semibold">All groups</CardTitle>
-                        <CardDescription>Your active workspace containers, available directly from the main dashboard.</CardDescription>
+                        <CardDescription>Every active notebook space where sources will be uploaded, organized, and explained.</CardDescription>
                       </div>
                       <Button asChild variant="ghost" className="rounded-full text-sm font-medium">
                         <Link href="/groups">Dedicated page</Link>
@@ -334,11 +352,10 @@ export default function Home() {
                   </CardHeader>
                   <CardContent className="space-y-4 pb-6">
                     {isBooting ? (
-                      <div className="flex min-h-56 items-center justify-center rounded-[1.5rem] border border-dashed border-zinc-300 bg-zinc-50/60 dark:border-zinc-700 dark:bg-white/5">
-                        <div className="flex items-center gap-3 text-sm text-zinc-600 dark:text-zinc-300">
-                          <LoaderCircle className="h-5 w-5 animate-spin" />
-                          Loading your workspace...
-                        </div>
+                      <div className="space-y-4 rounded-[1.5rem] border border-dashed border-zinc-300 bg-zinc-50/60 p-5 dark:border-zinc-700 dark:bg-white/5">
+                        <Skeleton className="h-6 w-44" />
+                        <Skeleton className="h-24 w-full rounded-[1.25rem]" />
+                        <Skeleton className="h-24 w-full rounded-[1.25rem]" />
                       </div>
                     ) : groups.length === 0 ? (
                       <div className="rounded-[1.5rem] border border-dashed border-zinc-300 bg-zinc-50/60 px-6 py-14 text-center dark:border-zinc-700 dark:bg-white/5">
@@ -347,7 +364,7 @@ export default function Home() {
                         </div>
                         <h2 className="text-xl font-semibold text-zinc-950 dark:text-zinc-50">No groups yet</h2>
                         <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-                          Create your first group on the left and it will appear here immediately.
+                          Create your first workspace, then start adding YouTube links, web pages, PDFs, DOCX files, or TXT notes.
                         </p>
                       </div>
                     ) : (
@@ -390,8 +407,8 @@ export default function Home() {
                     <div className="mb-3 inline-flex rounded-2xl bg-emerald-500/10 p-3 text-emerald-600 dark:text-emerald-400">
                       <ShieldCheck className="h-5 w-5" />
                     </div>
-                    <CardTitle className="text-xl font-semibold">Security posture</CardTitle>
-                    <CardDescription>Your access layer is protected through Clerk authentication and validated server routes.</CardDescription>
+                    <CardTitle className="text-xl font-semibold">Protected source access</CardTitle>
+                    <CardDescription>Authentication and validated server routes help keep uploaded links, files, and model actions tied to the right user.</CardDescription>
                   </CardHeader>
                 </Card>
 
@@ -400,8 +417,8 @@ export default function Home() {
                     <div className="mb-3 inline-flex rounded-2xl bg-sky-500/10 p-3 text-sky-600 dark:text-sky-400">
                       <Brain className="h-5 w-5" />
                     </div>
-                    <CardTitle className="text-xl font-semibold">Workspace logic</CardTitle>
-                    <CardDescription>The dashboard now loads groups live, supports creation inline, and lets you remove groups without leaving home.</CardDescription>
+                    <CardTitle className="text-xl font-semibold">Source understanding</CardTitle>
+                    <CardDescription>Users can upload YouTube links, web links, PDFs, DOCX files, and TXT documents so the LLM can explain the content instead of guessing.</CardDescription>
                   </CardHeader>
                 </Card>
 
@@ -410,28 +427,33 @@ export default function Home() {
                     <div className="mb-3 inline-flex rounded-2xl bg-amber-500/10 p-3 text-amber-600 dark:text-amber-400">
                       <KeyRound className="h-5 w-5" />
                     </div>
-                    <CardTitle className="text-xl font-semibold">Account controls</CardTitle>
-                    <CardDescription>Profile and onboarding stay one click away when you want to update identity or model access.</CardDescription>
+                    <CardTitle className="text-xl font-semibold">Answer and explain</CardTitle>
+                    <CardDescription>Once sources are added, the workspace is ready for summaries, plain-English explanations, comparisons, and guided question answering.</CardDescription>
                   </CardHeader>
                 </Card>
               </section>
 
               {pageError && (
-                <div className="rounded-[1.5rem] border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700 shadow-sm dark:border-red-900/30 dark:bg-red-950/20 dark:text-red-300">
-                  {pageError}
-                </div>
+                <Alert variant="destructive" className="rounded-[1.5rem] border-red-200 bg-red-50 shadow-sm dark:border-red-900/30 dark:bg-red-950/20">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Dashboard failed to load</AlertTitle>
+                  <AlertDescription>{pageError}</AlertDescription>
+                </Alert>
               )}
 
               {groupError && (
-                <div className="rounded-[1.5rem] border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700 shadow-sm dark:border-red-900/30 dark:bg-red-950/20 dark:text-red-300">
-                  {groupError}
-                </div>
+                <Alert variant="destructive" className="rounded-[1.5rem] border-red-200 bg-red-50 shadow-sm dark:border-red-900/30 dark:bg-red-950/20">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Group action failed</AlertTitle>
+                  <AlertDescription>{groupError}</AlertDescription>
+                </Alert>
               )}
 
               {groupMessage && (
-                <div className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-700 shadow-sm dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-300">
-                  {groupMessage}
-                </div>
+                <Alert className="rounded-[1.5rem] border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-300">
+                  <AlertTitle>Workspace updated</AlertTitle>
+                  <AlertDescription>{groupMessage}</AlertDescription>
+                </Alert>
               )}
             </>
           )}

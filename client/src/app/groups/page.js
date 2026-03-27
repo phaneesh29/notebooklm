@@ -3,11 +3,15 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
-import { ArrowLeft, FolderKanban, LoaderCircle, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, FolderKanban, Plus, Trash2 } from 'lucide-react';
 import AuthGuard from '@/components/AuthGuard';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import { apiRequest } from '@/lib/api';
 
 export default function GroupsPage() {
@@ -93,10 +97,10 @@ export default function GroupsPage() {
           <section className="overflow-hidden rounded-[2rem] border border-white/70 bg-white/80 shadow-[0_30px_80px_rgba(15,23,42,0.08)] backdrop-blur dark:border-white/10 dark:bg-white/5 dark:shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
             <div className="grid gap-8 px-6 py-6 lg:grid-cols-[1.1fr_0.9fr] lg:px-8 lg:py-8">
               <div className="space-y-5">
-                <div className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white/90 px-3 py-1 text-xs font-medium uppercase tracking-[0.24em] text-zinc-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
+                <Badge variant="outline" className="w-fit rounded-full border-zinc-200 bg-white/90 px-3 py-1 uppercase tracking-[0.24em] text-zinc-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
                   <FolderKanban className="h-3.5 w-3.5" />
                   Group Workspace
-                </div>
+                </Badge>
                 <div className="space-y-3">
                   <h1 className="text-4xl font-semibold tracking-[-0.04em] text-zinc-950 dark:text-zinc-50 sm:text-5xl">
                     Create the containers your research will live in.
@@ -131,29 +135,38 @@ export default function GroupsPage() {
                       {isCreating ? 'Creating group...' : 'Create group'}
                     </Button>
                   </form>
+                  <Separator className="my-5" />
+                  <div className="flex items-center justify-between text-sm text-zinc-600 dark:text-zinc-300">
+                    <span>Current groups</span>
+                    <Badge variant="secondary">{groups.length}</Badge>
+                  </div>
                 </CardContent>
               </Card>
             </div>
           </section>
 
           {error && (
-            <div className="rounded-[1.5rem] border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700 shadow-sm dark:border-red-900/30 dark:bg-red-950/20 dark:text-red-300">
-              {error}
-            </div>
+            <Alert variant="destructive" className="rounded-[1.5rem] border-red-200 bg-red-50 shadow-sm dark:border-red-900/30 dark:bg-red-950/20">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Group action failed</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           )}
 
           {message && (
-            <div className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-700 shadow-sm dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-300">
-              {message}
-            </div>
+            <Alert className="rounded-[1.5rem] border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-300">
+              <AlertTitle>Group updated</AlertTitle>
+              <AlertDescription>{message}</AlertDescription>
+            </Alert>
           )}
 
           <section className="grid gap-4">
             {isLoading ? (
-              <div className="flex min-h-56 items-center justify-center rounded-[1.75rem] border border-white/70 bg-white/80 backdrop-blur dark:border-white/10 dark:bg-white/5">
-                <div className="flex items-center gap-3 text-sm text-zinc-600 dark:text-zinc-300">
-                  <LoaderCircle className="h-5 w-5 animate-spin" />
-                  Loading groups...
+              <div className="rounded-[1.75rem] border border-white/70 bg-white/80 p-6 backdrop-blur dark:border-white/10 dark:bg-white/5">
+                <div className="space-y-4">
+                  <Skeleton className="h-6 w-40" />
+                  <Skeleton className="h-24 w-full rounded-[1.25rem]" />
+                  <Skeleton className="h-24 w-full rounded-[1.25rem]" />
                 </div>
               </div>
             ) : groups.length === 0 ? (
