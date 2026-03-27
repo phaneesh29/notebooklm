@@ -20,7 +20,7 @@ export default function AuthGuard({ children }) {
     }
 
     // Skip check if already on onboarding or profile
-    if (pathname === '/onboarding' || pathname === '/profile') {
+    if (pathname === '/onboarding' || pathname === '/profile' || pathname === '/groups') {
       setIsChecking(false);
       return;
     }
