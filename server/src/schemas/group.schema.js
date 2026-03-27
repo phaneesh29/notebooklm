@@ -49,3 +49,8 @@ export const createLinkDocumentSchema = z.object({
     });
   }
 });
+
+export const createFileDocumentSchema = z.object({
+  groupId: z.uuid('groupId must be a valid UUID'),
+  title: z.string().trim().max(255, 'title must be 255 characters or fewer').optional().or(z.literal('')),
+});
