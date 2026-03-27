@@ -373,7 +373,7 @@ export default function Home() {
                           key={group.id}
                           className="flex flex-col gap-4 rounded-[1.5rem] border border-zinc-200/80 bg-zinc-50/80 p-4 transition hover:border-zinc-300 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/8 sm:flex-row sm:items-center sm:justify-between"
                         >
-                          <div className="min-w-0">
+                          <Link href={`/group/${group.id}`} className="min-w-0 flex-1">
                             <div className="flex items-center gap-3">
                               <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-zinc-700 ring-1 ring-zinc-200 dark:bg-zinc-900 dark:text-zinc-200 dark:ring-white/10">
                                 <FolderKanban className="h-4 w-4" />
@@ -383,7 +383,7 @@ export default function Home() {
                                 <p className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">{group.id}</p>
                               </div>
                             </div>
-                          </div>
+                          </Link>
                           <Button
                             type="button"
                             variant="destructive"

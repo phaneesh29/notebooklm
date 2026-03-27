@@ -183,10 +183,10 @@ export default function GroupsPage() {
               groups.map((group) => (
                 <Card key={group.id} className="rounded-[1.75rem] border-white/70 bg-white/80 py-0 shadow-[0_20px_50px_rgba(15,23,42,0.06)] backdrop-blur dark:border-white/10 dark:bg-white/5">
                   <CardContent className="flex flex-col gap-4 py-6 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
+                    <Link href={`/group/${group.id}`} className="min-w-0 flex-1">
                       <h2 className="truncate text-xl font-semibold text-zinc-950 dark:text-zinc-50">{group.title}</h2>
                       <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{group.id}</p>
-                    </div>
+                    </Link>
                     <Button
                       type="button"
                       variant="destructive"
