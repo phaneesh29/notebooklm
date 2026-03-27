@@ -22,6 +22,13 @@
       "when": 1774615293612,
       "tag": "0002_panoramic_forgotten_one",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1774625181780,
+      "tag": "0003_careful_texas_twister",
+      "breakpoints": true
     }
   ]
 }
