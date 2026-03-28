@@ -17,5 +17,5 @@ export const assertGroupAccess = async ({ groupId, userId }) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Group not found');
   }
 
-  throw new ApiError(httpStatus.FORBIDDEN, 'You are not allowed to add documents to this group');
+  throw new ApiError(httpStatus.FORBIDDEN, 'You are not allowed to access this group');
 };

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { AlertTriangle, ArrowLeft, FileText, Globe, Link2, PlayCircle, Upload } from 'lucide-react';
 
@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiRequest } from '@/lib/api';
@@ -54,23 +55,34 @@ function formatDocumentType(type) {
   return type;
 }
 
+function formatDocumentSource(document) {
+  return document.sourceUrl || document.originalFileName || 'Stored document';
+}
+
 export default function GroupDetailPage() {
   const params = useParams();
   const { getToken } = useAuth();
   const groupId = params?.groupId ?? '';
+  const fileInputRef = useRef(null);
 
   const [group, setGroup] = useState(null);
-  const [recentDocuments, setRecentDocuments] = useState([]);
+  const [documents, setDocuments] = useState([]);
   const [pageError, setPageError] = useState('');
   const [feedbackMessage, setFeedbackMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmittingLink, setIsSubmittingLink] = useState(false);
   const [isSubmittingFile, setIsSubmittingFile] = useState(false);
-  const [linkForm, setLinkForm] = useState({ title: '', sourceUrl: '' });
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [linkForm, setLinkForm] = useState({ title: '', sourceUrl: '', type: 'web' });
   const [fileForm, setFileForm] = useState({ title: '', file: null });
 
+  const loadDocuments = async (token) => {
+    const response = await apiRequest(`/groups/${groupId}/documents`, { token });
+    setDocuments(response.data ?? []);
+  };
+
   useEffect(() => {
-    const loadGroup = async () => {
+    const loadGroupPage = async () => {
       if (!groupId) {
         setPageError('Missing group id');
         setIsLoading(false);
@@ -80,14 +92,18 @@ export default function GroupDetailPage() {
       try {
         setPageError('');
         const token = await getToken();
-        const response = await apiRequest('/groups', { token });
-        const matchedGroup = (response.data ?? []).find((item) => item.id === groupId);
+        const [groupsResponse, documentsResponse] = await Promise.all([
+          apiRequest('/groups', { token }),
+          apiRequest(`/groups/${groupId}/documents`, { token }),
+        ]);
+        const matchedGroup = (groupsResponse.data ?? []).find((item) => item.id === groupId);
 
         if (!matchedGroup) {
           throw new Error('Group not found');
         }
 
         setGroup(matchedGroup);
+        setDocuments(documentsResponse.data ?? []);
       } catch (error) {
         setPageError(error.message);
       } finally {
@@ -95,12 +111,8 @@ export default function GroupDetailPage() {
       }
     };
 
-    loadGroup();
+    loadGroupPage();
   }, [getToken, groupId]);
-
-  const prependRecentDocument = (document) => {
-    setRecentDocuments((currentDocuments) => [document, ...currentDocuments].slice(0, 5));
-  };
 
   const handleLinkChange = (event) => {
     const { name, value } = event.target;
@@ -111,12 +123,23 @@ export default function GroupDetailPage() {
     setFileForm((currentForm) => ({ ...currentForm, title: event.target.value }));
   };
 
-  const handleFileSelection = (event) => {
-    const selectedFile = event.target.files?.[0] ?? null;
+  const setSelectedFile = (selectedFile) => {
     setFileForm((currentForm) => ({ ...currentForm, file: selectedFile }));
   };
 
-  const handleSubmitLink = async (type) => {
+  const handleFileSelection = (event) => {
+    setSelectedFile(event.target.files?.[0] ?? null);
+  };
+
+  const handleFileDrop = (event) => {
+    event.preventDefault();
+    setIsDraggingFile(false);
+    setSelectedFile(event.dataTransfer.files?.[0] ?? null);
+  };
+
+  const handleSubmitLink = async (event) => {
+    event.preventDefault();
+
     if (!linkForm.title.trim() || !linkForm.sourceUrl.trim()) {
       setPageError('Link title and URL are required');
       return;
@@ -135,12 +158,12 @@ export default function GroupDetailPage() {
           groupId,
           title: linkForm.title.trim(),
           sourceUrl: linkForm.sourceUrl.trim(),
-          type,
+          type: linkForm.type,
         }),
       });
 
-      prependRecentDocument(response.data);
-      setLinkForm({ title: '', sourceUrl: '' });
+      setLinkForm({ title: '', sourceUrl: '', type: 'web' });
+      await loadDocuments(token);
       setFeedbackMessage(response.message || 'Link document queued successfully');
     } catch (error) {
       setPageError(error.message);
@@ -174,8 +197,11 @@ export default function GroupDetailPage() {
         body: formData,
       });
 
-      prependRecentDocument(response.data);
       setFileForm({ title: '', file: null });
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      await loadDocuments(token);
       setFeedbackMessage(response.message || 'File uploaded and queued successfully');
     } catch (error) {
       setPageError(error.message);
@@ -251,8 +277,8 @@ export default function GroupDetailPage() {
                     <Badge variant="secondary">Ready</Badge>
                   </div>
                   <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/60 px-4 py-3">
-                    <span>Session docs</span>
-                    <Badge variant="outline">{recentDocuments.length}</Badge>
+                    <span>Stored docs</span>
+                    <Badge variant="outline">{documents.length}</Badge>
                   </div>
                 </CardContent>
               </Card>
@@ -278,61 +304,60 @@ export default function GroupDetailPage() {
             <Card className="rounded-[1.8rem] bg-white/78 py-0 dark:bg-white/5">
               <CardHeader className="pb-3">
                 <CardTitle className="text-xl font-semibold">Add link</CardTitle>
-                <CardDescription>Web or YouTube.</CardDescription>
+                <CardDescription>Choose type, then submit.</CardDescription>
               </CardHeader>
-              <CardContent className="flex flex-col gap-4 pb-6">
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="link-title">Title</Label>
-                  <Input
-                    id="link-title"
-                    name="title"
-                    value={linkForm.title}
-                    onChange={handleLinkChange}
-                    placeholder="Design systems"
-                    className="h-12 rounded-2xl bg-white/90 dark:bg-zinc-900/70"
-                  />
-                </div>
+              <CardContent className="pb-6">
+                <form onSubmit={handleSubmitLink} className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="link-title">Title</Label>
+                    <Input
+                      id="link-title"
+                      name="title"
+                      value={linkForm.title}
+                      onChange={handleLinkChange}
+                      placeholder="Design systems"
+                      className="h-12 rounded-2xl bg-white/90 dark:bg-zinc-900/70"
+                    />
+                  </div>
 
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="link-source-url">URL</Label>
-                  <Input
-                    id="link-source-url"
-                    name="sourceUrl"
-                    value={linkForm.sourceUrl}
-                    onChange={handleLinkChange}
-                    placeholder="https://..."
-                    className="h-12 rounded-2xl bg-white/90 dark:bg-zinc-900/70"
-                  />
-                </div>
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="link-source-url">URL</Label>
+                    <Input
+                      id="link-source-url"
+                      name="sourceUrl"
+                      value={linkForm.sourceUrl}
+                      onChange={handleLinkChange}
+                      placeholder="https://..."
+                      className="h-12 rounded-2xl bg-white/90 dark:bg-zinc-900/70"
+                    />
+                  </div>
 
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <Button
-                    type="button"
-                    disabled={isSubmittingLink}
-                    onClick={() => handleSubmitLink('web')}
-                    className="h-12 flex-1 rounded-2xl"
-                  >
-                    <Globe data-icon="inline-start" />
-                    {isSubmittingLink ? 'Queueing...' : 'Add web'}
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="link-type">Source type</Label>
+                    <Select
+                      id="link-type"
+                      name="type"
+                      value={linkForm.type}
+                      onChange={handleLinkChange}
+                      className="bg-white/90 dark:bg-zinc-900/70"
+                    >
+                      <option value="web">Web link</option>
+                      <option value="youtube">YouTube link</option>
+                    </Select>
+                  </div>
+
+                  <Button type="submit" disabled={isSubmittingLink} className="h-12 rounded-2xl">
+                    {linkForm.type === 'youtube' ? <PlayCircle data-icon="inline-start" /> : <Globe data-icon="inline-start" />}
+                    {isSubmittingLink ? 'Queueing...' : 'Add source'}
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={isSubmittingLink}
-                    onClick={() => handleSubmitLink('youtube')}
-                    className="h-12 flex-1 rounded-2xl"
-                  >
-                    <PlayCircle data-icon="inline-start" />
-                    {isSubmittingLink ? 'Queueing...' : 'Add YouTube'}
-                  </Button>
-                </div>
+                </form>
               </CardContent>
             </Card>
 
             <Card className="rounded-[1.8rem] bg-white/78 py-0 dark:bg-white/5">
               <CardHeader className="pb-3">
                 <CardTitle className="text-xl font-semibold">Upload file</CardTitle>
-                <CardDescription>PDF, DOCX, TXT.</CardDescription>
+                <CardDescription>Drag and drop or browse.</CardDescription>
               </CardHeader>
               <CardContent className="pb-6">
                 <form onSubmit={handleSubmitFile} className="flex flex-col gap-4">
@@ -349,13 +374,41 @@ export default function GroupDetailPage() {
 
                   <div className="flex flex-col gap-2">
                     <Label htmlFor="document-file">File</Label>
-                    <Input
+                    <input
+                      ref={fileInputRef}
                       id="document-file"
                       type="file"
                       accept=".pdf,.docx,.txt"
                       onChange={handleFileSelection}
-                      className="h-12 rounded-2xl bg-white/90 file:mr-4 file:border-0 file:bg-transparent file:text-sm file:font-medium dark:bg-zinc-900/70"
+                      className="sr-only"
                     />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        setIsDraggingFile(true);
+                      }}
+                      onDragLeave={() => setIsDraggingFile(false)}
+                      onDrop={handleFileDrop}
+                      className={`flex min-h-36 flex-col items-center justify-center gap-3 rounded-[1.6rem] border border-dashed px-5 py-6 text-center transition ${
+                        isDraggingFile
+                          ? 'border-primary bg-primary/8 shadow-[0_18px_50px_rgba(59,130,246,0.14)]'
+                          : 'border-border/80 bg-background/60 hover:border-primary/30 hover:bg-background/90'
+                      }`}
+                    >
+                      <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                        <Upload className="size-5" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                          Drop file here or click to browse
+                        </span>
+                        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                          PDF, DOCX, TXT up to 25 MB
+                        </span>
+                      </div>
+                    </button>
                   </div>
 
                   {fileForm.file && (
@@ -376,11 +429,16 @@ export default function GroupDetailPage() {
 
           <Card className="rounded-[1.8rem] bg-white/78 py-0 dark:bg-white/5">
             <CardHeader className="pb-3">
-              <CardTitle className="text-xl font-semibold">Recent activity</CardTitle>
-              <CardDescription>Current session only.</CardDescription>
+              <CardTitle className="text-xl font-semibold">Stored documents</CardTitle>
+              <CardDescription>Saved for this group.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4 pb-6">
-              {recentDocuments.length === 0 ? (
+              {isLoading ? (
+                <div className="flex flex-col gap-4">
+                  <Skeleton className="h-24 w-full rounded-[1.25rem]" />
+                  <Skeleton className="h-24 w-full rounded-[1.25rem]" />
+                </div>
+              ) : documents.length === 0 ? (
                 <div className="rounded-[1.6rem] border border-dashed border-zinc-300 bg-white/65 px-6 py-12 text-center dark:border-zinc-700 dark:bg-white/5">
                   <div className="mx-auto mb-4 inline-flex size-12 items-center justify-center rounded-2xl bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
                     <Link2 />
@@ -389,7 +447,7 @@ export default function GroupDetailPage() {
                   <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Add a source above.</p>
                 </div>
               ) : (
-                recentDocuments.map((document, index) => (
+                documents.map((document, index) => (
                   <div
                     key={document.id ?? `${document.title}-${index}`}
                     className="flex flex-col gap-4 rounded-[1.6rem] border border-white/70 bg-white/88 p-5 dark:border-white/10 dark:bg-white/6 sm:flex-row sm:items-center sm:justify-between"
@@ -400,11 +458,9 @@ export default function GroupDetailPage() {
                         <Badge variant="outline">{formatDocumentType(document.type)}</Badge>
                         <Badge variant={statusBadgeVariant[document.status] || 'secondary'}>{document.status}</Badge>
                       </div>
-                      <p className="mt-2 truncate text-sm text-zinc-600 dark:text-zinc-300">
-                        {document.sourceUrl || document.originalFileName || 'Stored document'}
-                      </p>
+                      <p className="mt-2 truncate text-sm text-zinc-600 dark:text-zinc-300">{formatDocumentSource(document)}</p>
                     </div>
-                    <div className="text-sm text-zinc-500 dark:text-zinc-400">Job {document.queueJobId || 'queued'}</div>
+                    <div className="text-sm text-zinc-500 dark:text-zinc-400">{document.createdAt ? new Date(document.createdAt).toLocaleDateString() : 'Saved'}</div>
                   </div>
                 ))
               )}
@@ -412,7 +468,7 @@ export default function GroupDetailPage() {
               <Separator />
 
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                Full history can be added once the backend exposes a document listing route.
+                This list now comes from the backend and stays visible after reload.
               </p>
             </CardContent>
           </Card>

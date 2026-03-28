@@ -8,6 +8,10 @@ export const deleteGroupParamsSchema = z.object({
   groupId: z.uuid('groupId must be a valid UUID'),
 });
 
+export const listGroupDocumentsParamsSchema = z.object({
+  groupId: z.uuid('groupId must be a valid UUID'),
+});
+
 const youtubeHostnames = new Set([
   'youtube.com',
   'www.youtube.com',
