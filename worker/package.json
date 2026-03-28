@@ -9,6 +9,7 @@
     "dev": "nodemon src/worker.js"
   },
   "dependencies": {
+    "@langchain/textsplitters": "^0.1.0",
     "bullmq": "^5.71.1",
     "cheerio": "^1.2.0",
     "dotenv": "^17.3.1",
