@@ -9,11 +9,7 @@ export const enqueueDocument = async (document) => {
   try {
     const job = await addInQueue({
       documentId: document.id,
-      groupId: document.groupId,
       userId: document.userId,
-      type: document.type,
-      sourceUrl: document.sourceUrl,
-      storageKey: document.storageKey,
     });
 
     return job;
