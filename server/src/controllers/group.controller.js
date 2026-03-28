@@ -3,7 +3,7 @@ import httpStatus from 'http-status';
 import { and, desc, eq } from 'drizzle-orm';
 import { getAuth } from '@clerk/express';
 import { db } from '../db/index.js';
-import { documents, groups } from '../db/schema.js';
+import { documents, groups, messages } from '../db/schema.js';
 import {
   createFileDocumentSchema,
   createGroupSchema,
@@ -202,17 +202,13 @@ export const deleteGroup = async (req, res) => {
   const { groupId } = validateWithSchema(deleteGroupParamsSchema, req.params);
   const user = await getAuthenticatedUser(clerkUserId);
 
-  const [deletedGroup] = await db.delete(groups).where(and(eq(groups.id, groupId), eq(groups.userId, user.id))).returning({ id: groups.id });
+  await assertGroupAccess({ groupId, userId: user.id });
 
-  if (!deletedGroup) {
-    const [group] = await db.select({ id: groups.id }).from(groups).where(eq(groups.id, groupId)).limit(1);
-
-    if (!group) {
-      throw new ApiError(httpStatus.NOT_FOUND, 'Group not found');
-    }
-
-    throw new ApiError(httpStatus.FORBIDDEN, 'You are not allowed to delete this group');
-  }
+  await db.transaction(async (tx) => {
+    await tx.delete(messages).where(and(eq(messages.groupId, groupId), eq(messages.userId, user.id)));
+    await tx.delete(documents).where(and(eq(documents.groupId, groupId), eq(documents.userId, user.id)));
+    await tx.delete(groups).where(and(eq(groups.id, groupId), eq(groups.userId, user.id)));
+  });
 
   res.status(httpStatus.OK).json(new ApiResponse(httpStatus.OK, {}, 'Group deleted successfully'));
 };
