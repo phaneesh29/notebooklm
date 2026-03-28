@@ -78,3 +78,34 @@ export const upsertDocumentChunks = async (
     points,
   });
 };
+
+export const deleteDocumentChunks = async (
+  { documentId, userId },
+  { collectionName = env.qdrantCollectionName } = {}
+) => {
+  if (!documentId || !userId) {
+    throw new Error('documentId and userId are required');
+  }
+
+  const qdrant = getQdrantClient();
+
+  return qdrant.delete(collectionName, {
+    wait: true,
+    filter: {
+      must: [
+        {
+          key: 'documentId',
+          match: {
+            value: documentId,
+          },
+        },
+        {
+          key: 'userId',
+          match: {
+            value: userId,
+          },
+        },
+      ],
+    },
+  });
+};

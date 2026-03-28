@@ -1,5 +1,6 @@
 import env from './config/env.js';
 import { createDocumentWorker } from './lib/queue.js';
+import { processDocumentJob } from './services/document-processing.service.js';
 
 const worker = createDocumentWorker(async (job) => {
   console.log('[worker] received job', {
@@ -7,6 +8,8 @@ const worker = createDocumentWorker(async (job) => {
     name: job.name,
     data: job.data,
   });
+
+  await processDocumentJob(job.data);
 });
 
 worker.on('ready', () => {
