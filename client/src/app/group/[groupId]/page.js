@@ -114,6 +114,29 @@ export default function GroupDetailPage() {
     loadGroupPage();
   }, [getToken, groupId]);
 
+  useEffect(() => {
+    if (!groupId || isLoading) {
+      return undefined;
+    }
+
+    const hasActiveDocuments = documents.some((document) => document.status === 'queued' || document.status === 'processing');
+
+    if (!hasActiveDocuments) {
+      return undefined;
+    }
+
+    const intervalId = setInterval(async () => {
+      try {
+        const token = await getToken();
+        await loadDocuments(token);
+      } catch (error) {
+        console.error('Error polling document statuses:', error);
+      }
+    }, 4000);
+
+    return () => clearInterval(intervalId);
+  }, [documents, getToken, groupId, isLoading]);
+
   const handleLinkChange = (event) => {
     const { name, value } = event.target;
     setLinkForm((currentForm) => ({ ...currentForm, [name]: value }));

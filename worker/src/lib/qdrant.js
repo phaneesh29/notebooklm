@@ -81,11 +81,16 @@ export const upsertDocumentChunks = async (
 
 export const deleteDocumentChunks = async (
   { documentId, userId },
-  { collectionName = env.qdrantCollectionName } = {}
+  {
+    collectionName = env.qdrantCollectionName,
+    vectorSize = env.qdrantVectorSize,
+  } = {}
 ) => {
   if (!documentId || !userId) {
     throw new Error('documentId and userId are required');
   }
+
+  await ensureQdrantCollection({ collectionName, vectorSize });
 
   const qdrant = getQdrantClient();
 
