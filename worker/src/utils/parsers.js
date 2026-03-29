@@ -1,7 +1,7 @@
 import * as cheerio from 'cheerio';
 import mammoth from 'mammoth';
 import pdfParse from 'pdf-parse';
-import { YoutubeTranscript } from 'youtube-transcript';
+import { fetchTranscript } from 'youtube-transcript/dist/youtube-transcript.esm.js';
 import { normalizeText } from './text-cleaning.js';
 
 export const parseTxtBuffer = (buffer) => normalizeText(buffer.toString('utf8'));
@@ -42,7 +42,7 @@ export const parseWebUrl = async (url) => {
 };
 
 export const parseYoutubeUrl = async (url) => {
-  const transcriptItems = await YoutubeTranscript.fetchTranscript(url);
+  const transcriptItems = await fetchTranscript(url);
   const text = normalizeText(transcriptItems.map((item) => item.text).join(' '));
 
   let title = null;
