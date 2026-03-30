@@ -9,6 +9,8 @@ import {
   listGroupDocuments,
   listGroups,
 } from '../controllers/group.controller.js';
+import { streamGroupChat } from '../controllers/chat.controller.js';
+import { requireApiKey } from '../middlewares/auth.middleware.js';
 
 const router = express.Router();
 
@@ -22,6 +24,7 @@ const upload = multer({
 router.get('/', requireAuth(), listGroups);
 router.post('/', requireAuth(), createGroup);
 router.get('/:groupId/documents', requireAuth(), listGroupDocuments);
+router.post('/:groupId/chat/stream', requireAuth(), requireApiKey, streamGroupChat);
 router.post('/documents/links', requireAuth(), createLinkDocument);
 router.post('/documents/files', requireAuth(), upload.single('file'), createFileDocument);
 router.delete('/:groupId', requireAuth(), deleteGroup);

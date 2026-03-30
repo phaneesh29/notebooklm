@@ -15,6 +15,12 @@ const env = {
   minioBucketName: process.env.MINIO_BUCKET_NAME || 'notebooklm-documents',
   clerkWebhookSecret: process.env.CLERK_WEBHOOK_SECRET,
   encryptionKey: process.env.ENCRYPTION_KEY || 'default-secret-do-not-use-in-prod',
+  chatModel: 'gemini-3.1-flash-lite-preview',
+  chatAgentName: 'chatAssistant',
+  chatAppName: 'notebooklm-chat',
+  chatHistoryTurnLimit: 5,
 };
+
+env.chatHistoryMessageLimit = env.chatHistoryTurnLimit * 2;
 
 export default env;
