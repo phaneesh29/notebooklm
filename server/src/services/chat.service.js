@@ -9,7 +9,7 @@ export const listRecentChatMessages = async ({ groupId, userId, limit = env.chat
   const recentMessages = await db.select()
     .from(messages)
     .where(and(eq(messages.groupId, groupId), eq(messages.userId, userId)))
-    .orderBy(desc(messages.createdAt))
+    .orderBy(desc(messages.createdAt), desc(messages.role))
     .limit(limit);
 
   return recentMessages.reverse();
@@ -48,6 +48,7 @@ export const deleteChatSession = async ({ runner, userId, sessionId }) => {
 
 export const persistChatTurn = async ({ groupId, userId, query, response }) => {
   const safeResponse = String(response || '').trim();
+  const now = new Date();
 
   return db.insert(messages).values([
     {
@@ -55,12 +56,14 @@ export const persistChatTurn = async ({ groupId, userId, query, response }) => {
       userId,
       role: 'user',
       content: query,
+      createdAt: now,
     },
     {
       groupId,
       userId,
       role: 'assistant',
       content: safeResponse,
+      createdAt: new Date(now.getTime() + 1),
     },
   ]).returning();
 };

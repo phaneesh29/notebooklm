@@ -112,9 +112,10 @@ export default function GroupDetailPage() {
       try {
         setPageError('');
         const token = await getToken();
-        const [groupsResponse, documentsResponse] = await Promise.all([
+        const [groupsResponse, documentsResponse, chatsResponse] = await Promise.all([
           apiRequest('/groups', { token }),
           apiRequest(`/groups/${groupId}/documents`, { token }),
+          apiRequest(`/groups/${groupId}/chat`, { token }).catch(() => ({ messages: [] })),
         ]);
         const matchedGroup = (groupsResponse.data ?? []).find((item) => item.id === groupId);
 
@@ -124,6 +125,7 @@ export default function GroupDetailPage() {
 
         setGroup(matchedGroup);
         setDocuments(documentsResponse.data ?? []);
+        setChatMessages(chatsResponse.messages ?? []);
       } catch (error) {
         setPageError(error.message);
       } finally {

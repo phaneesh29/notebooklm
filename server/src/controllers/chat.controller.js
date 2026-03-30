@@ -18,6 +18,25 @@ import {
 import ApiError from '../utils/ApiError.js';
 import { validateWithSchema } from '../utils/validateSchema.js';
 
+export const getGroupChats = async (req, res, next) => {
+  try {
+    const { userId: clerkUserId } = getAuth(req);
+    if (!clerkUserId) {
+      throw new ApiError(httpStatus.UNAUTHORIZED, 'You must be logged in');
+    }
+
+    const { groupId } = req.params;
+    const user = await getAuthenticatedUser(clerkUserId);
+    await assertGroupAccess({ groupId, userId: user.id });
+
+    const history = await listRecentChatMessages({ groupId, userId: user.id, limit: 100 });
+
+    res.status(httpStatus.OK).json({ messages: history });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const writeSse = (res, event, data) => {
   res.write(`event: ${event}\n`);
   res.write(`data: ${JSON.stringify(data)}\n\n`);
