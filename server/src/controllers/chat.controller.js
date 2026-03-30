@@ -140,7 +140,7 @@ export const streamGroupChat = async (req, res, next) => {
         runner,
         userId: user.id,
         sessionId: session.id,
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }
 };

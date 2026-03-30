@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
-import { AlertTriangle, ArrowLeft, FileText, Globe, Link2, PlayCircle, Upload } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Bot, FileText, Globe, Link2, LoaderCircle, PlayCircle, Send, Upload } from 'lucide-react';
 
 import AuthGuard from '@/components/AuthGuard';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { apiRequest } from '@/lib/api';
+import { apiRequest, API_BASE_URL } from '@/lib/api';
 
 const sourceTypes = [
   { title: 'YouTube', icon: PlayCircle },
@@ -59,17 +59,37 @@ function formatDocumentSource(document) {
   return document.sourceUrl || document.originalFileName || 'Stored document';
 }
 
+function parseSseChunk(chunk) {
+  const event = { type: 'message', data: '' };
+
+  chunk.split('\n').forEach((line) => {
+    if (line.startsWith('event:')) {
+      event.type = line.slice(6).trim();
+    } else if (line.startsWith('data:')) {
+      const value = line.slice(5).trim();
+      event.data = event.data ? `${event.data}\n${value}` : value;
+    }
+  });
+
+  return event;
+}
+
 export default function GroupDetailPage() {
   const params = useParams();
   const { getToken } = useAuth();
   const groupId = params?.groupId ?? '';
   const fileInputRef = useRef(null);
+  const chatViewportRef = useRef(null);
 
   const [group, setGroup] = useState(null);
   const [documents, setDocuments] = useState([]);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatQuery, setChatQuery] = useState('');
+  const [chatError, setChatError] = useState('');
   const [pageError, setPageError] = useState('');
   const [feedbackMessage, setFeedbackMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isStreamingChat, setIsStreamingChat] = useState(false);
   const [isSubmittingLink, setIsSubmittingLink] = useState(false);
   const [isSubmittingFile, setIsSubmittingFile] = useState(false);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
@@ -136,6 +156,14 @@ export default function GroupDetailPage() {
 
     return () => clearInterval(intervalId);
   }, [documents, getToken, groupId, isLoading]);
+
+  useEffect(() => {
+    if (!chatViewportRef.current) {
+      return;
+    }
+
+    chatViewportRef.current.scrollTop = chatViewportRef.current.scrollHeight;
+  }, [chatMessages]);
 
   const handleLinkChange = (event) => {
     const { name, value } = event.target;
@@ -230,6 +258,109 @@ export default function GroupDetailPage() {
       setPageError(error.message);
     } finally {
       setIsSubmittingFile(false);
+    }
+  };
+
+  const handleSubmitChat = async (event) => {
+    event.preventDefault();
+
+    const trimmedQuery = chatQuery.trim();
+
+    if (!trimmedQuery || isStreamingChat) {
+      return;
+    }
+
+    const userMessageId = `user-${Date.now()}`;
+    const assistantMessageId = `assistant-${Date.now() + 1}`;
+
+    setChatError('');
+    setChatQuery('');
+    setIsStreamingChat(true);
+    setChatMessages((currentMessages) => [
+      ...currentMessages,
+      { id: userMessageId, role: 'user', content: trimmedQuery },
+      { id: assistantMessageId, role: 'assistant', content: '', isStreaming: true },
+    ]);
+
+    try {
+      const token = await getToken();
+      const response = await fetch(`${API_BASE_URL}/groups/${groupId}/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ query: trimmedQuery }),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null);
+        throw new Error(errorBody?.message || 'Unable to start chat');
+      }
+
+      if (!response.body) {
+        throw new Error('Streaming response is unavailable');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const chunks = buffer.split('\n\n');
+        buffer = chunks.pop() ?? '';
+
+        chunks.forEach((chunk) => {
+          if (!chunk.trim()) {
+            return;
+          }
+
+          const eventPayload = parseSseChunk(chunk);
+          const parsedData = eventPayload.data ? JSON.parse(eventPayload.data) : {};
+
+          if (eventPayload.type === 'delta') {
+            setChatMessages((currentMessages) => currentMessages.map((message) => (
+              message.id === assistantMessageId
+                ? { ...message, content: `${message.content}${parsedData.text || ''}`, isStreaming: true }
+                : message
+            )));
+          }
+
+          if (eventPayload.type === 'message' || eventPayload.type === 'done') {
+            setChatMessages((currentMessages) => currentMessages.map((message) => (
+              message.id === assistantMessageId
+                ? { ...message, content: parsedData.text || message.content, isStreaming: eventPayload.type !== 'done' }
+                : message
+            )));
+          }
+
+          if (eventPayload.type === 'error') {
+            throw new Error(parsedData.message || 'Chat stream failed');
+          }
+        });
+      }
+
+      setChatMessages((currentMessages) => currentMessages.map((message) => (
+        message.id === assistantMessageId
+          ? { ...message, isStreaming: false }
+          : message
+      )));
+    } catch (error) {
+      setChatError(error.message);
+      setChatMessages((currentMessages) => currentMessages.map((message) => (
+        message.id === assistantMessageId
+          ? { ...message, isStreaming: false, content: message.content || 'I could not finish that response.' }
+          : message
+      )));
+    } finally {
+      setIsStreamingChat(false);
     }
   };
 
@@ -449,6 +580,85 @@ export default function GroupDetailPage() {
               </CardContent>
             </Card>
           </section>
+
+          <Card className="rounded-[1.8rem] bg-white/78 py-0 dark:bg-white/5">
+            <CardHeader className="pb-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-xl font-semibold">Group chat</CardTitle>
+                  <CardDescription>Ask questions against this group with streaming replies.</CardDescription>
+                </div>
+                <Badge variant="secondary" className="rounded-full px-3 py-1">
+                  <Bot className="size-3.5" />
+                  Live SSE
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4 pb-6">
+              {chatError && (
+                <Alert variant="destructive">
+                  <AlertTitle>Chat failed</AlertTitle>
+                  <AlertDescription>{chatError}</AlertDescription>
+                </Alert>
+              )}
+
+              <div
+                ref={chatViewportRef}
+                className="flex max-h-[28rem] min-h-[20rem] flex-col gap-3 overflow-y-auto rounded-[1.6rem] border border-border/70 bg-background/60 p-4"
+              >
+                {chatMessages.length === 0 ? (
+                  <div className="flex h-full flex-col items-center justify-center gap-3 rounded-[1.4rem] border border-dashed border-border/80 bg-white/70 px-6 py-10 text-center dark:bg-white/5">
+                    <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                      <Bot className="size-5" />
+                    </div>
+                    <div className="space-y-1">
+                      <h2 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">Start the first question</h2>
+                      <p className="text-sm text-zinc-600 dark:text-zinc-300">
+                        The server will use the last few stored turns automatically.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  chatMessages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div
+                        className={`max-w-[85%] rounded-[1.4rem] px-4 py-3 text-sm shadow-sm ${
+                          message.role === 'user'
+                            ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'
+                            : 'border border-border/70 bg-white text-zinc-800 dark:bg-zinc-900/80 dark:text-zinc-100'
+                        }`}
+                      >
+                        <div className="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] opacity-70">
+                          {message.role === 'user' ? 'You' : 'Assistant'}
+                          {message.isStreaming && <LoaderCircle className="size-3 animate-spin" />}
+                        </div>
+                        <p className="whitespace-pre-wrap leading-6">
+                          {message.content || (message.isStreaming ? 'Thinking...' : '')}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <form onSubmit={handleSubmitChat} className="flex flex-col gap-3 sm:flex-row">
+                <Input
+                  value={chatQuery}
+                  onChange={(event) => setChatQuery(event.target.value)}
+                  placeholder="Ask about the documents in this group..."
+                  disabled={isStreamingChat}
+                  className="h-12 rounded-2xl bg-white/90 dark:bg-zinc-900/70"
+                />
+                <Button type="submit" disabled={isStreamingChat || !chatQuery.trim()} className="h-12 rounded-2xl px-5 sm:min-w-32">
+                  {isStreamingChat ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : <Send data-icon="inline-start" />}
+                  {isStreamingChat ? 'Streaming...' : 'Send'}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
 
           <Card className="rounded-[1.8rem] bg-white/78 py-0 dark:bg-white/5">
             <CardHeader className="pb-3">
