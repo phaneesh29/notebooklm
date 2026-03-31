@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { apiRequest } from '@/lib/api';
 
-import { ExternalLink, KeyRound, ShieldCheck } from 'lucide-react';
+import { Bot, ExternalLink, KeyRound, ShieldCheck, Zap } from 'lucide-react';
 
 export default function OnboardingPage() {
   const [apiKey, setApiKey] = useState('');
@@ -24,7 +24,7 @@ export default function OnboardingPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!apiKey.trim()) {
-      setError('API Key is required');
+      setError('API Key is required to activate the agent.');
       return;
     }
 
@@ -38,7 +38,6 @@ export default function OnboardingPage() {
         token,
         body: JSON.stringify({ apiKey }),
       });
-
       router.push('/');
     } catch (err) {
       setError(err.message);
@@ -48,98 +47,109 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(14,165,233,0.14),transparent_28%),linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)] p-4 dark:bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.12),transparent_28%),linear-gradient(180deg,#09090b_0%,#111827_100%)]">
-      <div className="mx-auto flex min-h-screen w-full max-w-5xl items-center justify-center">
-        <Card className="w-full max-w-4xl rounded-[2rem] border-white/70 bg-white/85 py-0 shadow-[0_30px_80px_rgba(15,23,42,0.08)] backdrop-blur dark:border-white/10 dark:bg-white/5">
-        <CardHeader className="space-y-2 text-center">
-          <div className="mb-2 flex justify-center">
-            <UserButton appearance={{ elements: { userButtonAvatarBox: "h-14 w-14 ring-2 ring-white/80 shadow-sm" } }} />
+    <div className="flex-1 flex flex-col items-center justify-center p-6 bg-[radial-gradient(circle_at_50%_0%,rgba(63,63,70,0.05),transparent_50%)] animate-in fade-in duration-1000">
+      <Card className="w-full max-w-2xl rounded-[3rem] border-white/10 bg-card/60 shadow-[0_50px_100px_rgba(0,0,0,0.1)] dark:shadow-[0_50px_100px_rgba(0,0,0,0.5)] backdrop-blur-3xl overflow-hidden relative ring-1 ring-zinc-500/5">
+        <div className="absolute top-0 right-0 p-8 opacity-5 -rotate-12 translate-x-8 -translate-y-8 pointer-events-none transition-transform duration-1000">
+          <Zap className="size-64" />
+        </div>
+        
+        <CardHeader className="space-y-6 text-center pt-16">
+          <div className="flex justify-center -mt-8 mb-4">
+             <div className="relative group">
+                <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping opacity-20" />
+                <UserButton appearance={{ elements: { userButtonAvatarBox: "h-20 w-20 ring-4 ring-background shadow-2xl transition-transform group-hover:scale-105" } }} />
+             </div>
           </div>
-          <div className="flex justify-center">
-            <Badge variant="outline" className="rounded-full px-3 py-1 uppercase tracking-[0.2em]">
-              Secure Setup
+          <div className="flex flex-col items-center gap-3">
+            <Badge variant="secondary" className="rounded-full px-4 py-1.5 bg-primary/10 text-primary border-primary/20 text-[10px] font-black uppercase tracking-[0.2em]">
+               System Activation
             </Badge>
+            <h1 className="text-5xl font-black tracking-tighter text-zinc-900 dark:text-zinc-100 leading-none">Initialize Intelligence</h1>
+            <CardDescription className="max-w-md mx-auto text-sm font-bold text-muted-foreground/80 leading-relaxed pt-2">
+               Connect your Gemini API gateway to ground the research engine in your authenticated identity.
+            </CardDescription>
           </div>
-          <CardTitle className="text-3xl font-semibold tracking-[-0.04em]">Connect Gemini access</CardTitle>
-          <CardDescription className="mx-auto max-w-2xl text-base text-zinc-500 dark:text-zinc-400">
-            Add your Gemini API key once so NotebookLM can unlock protected research flows, group actions, and future conversations.
-          </CardDescription>
         </CardHeader>
-        <CardContent className="pb-8">
-          <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
-            <div className="space-y-4 rounded-[1.5rem] border border-zinc-200/80 bg-zinc-50/85 p-6 text-left dark:border-white/10 dark:bg-white/5">
-              <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-600 dark:text-sky-400">
-                <ShieldCheck className="h-5 w-5" />
-              </div>
-              <h2 className="text-xl font-semibold text-zinc-950 dark:text-zinc-50">Why this matters</h2>
-              <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-                Your key stays tied to your authenticated workspace so group creation, profile actions, and protected server routes can work together.
-              </p>
-              <Separator />
-              <div className="space-y-3 text-sm text-zinc-600 dark:text-zinc-300">
-                <div className="flex items-center justify-between">
-                  <span>Workspace security</span>
-                  <Badge variant="success">Protected</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Setup time</span>
-                  <Badge variant="secondary">1 minute</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Key source</span>
-                  <Badge variant="outline">Google AI Studio</Badge>
-                </div>
-              </div>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-6 rounded-[1.5rem] border border-zinc-200/80 bg-white/90 p-6 text-left dark:border-white/10 dark:bg-zinc-950/40">
-              <div className="space-y-2">
-                <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
-                  <KeyRound className="h-5 w-5" />
-                </div>
-                <h2 className="text-xl font-semibold text-zinc-950 dark:text-zinc-50">API configuration</h2>
-                <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-                  Enter a Gemini key for your account. You can update it later from profile settings.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="apiKey" className="text-sm font-medium">Gemini API Key</Label>
-              <Input
-                id="apiKey"
-                type="password"
-                placeholder="AIza..."
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                className="h-12 rounded-xl bg-zinc-50 font-mono text-sm dark:bg-zinc-900/60"
-              />
-              <p className="text-xs text-zinc-500 pt-1">
-                Get your API key securely from{' '}
-                <a 
-                  href="https://aistudio.google.com/app/apikey" 
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="text-blue-600 dark:text-blue-400 font-medium hover:underline inline-flex items-center gap-1"
-                >
-                  Google AI Studio <ExternalLink className="h-3 w-3" />
-                </a>
-              </p>
+        
+        <CardContent className="pb-16 px-8 sm:px-16 space-y-10">
+           <form onSubmit={handleSubmit} className="space-y-8 animate-in slide-in-from-bottom-8 duration-700 delay-200">
+              <div className="space-y-4">
+                 <Label htmlFor="apiKey" className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/40 ml-1">Gemini Gateway Key</Label>
+                 <div className="relative group">
+                    <div className="absolute inset-0 rounded-2xl ring-1 ring-primary/5 transition-all pointer-events-none shadow-sm" />
+                    <KeyRound className="absolute left-5 top-1/2 -translate-y-1/2 size-5 text-muted-foreground group-focus-within:text-primary transition-all duration-300" />
+                    <Input
+                       id="apiKey"
+                       type="password"
+                       placeholder="Enter AIza key..."
+                       value={apiKey}
+                       onChange={(e) => setApiKey(e.target.value)}
+                       className="pl-14 h-16 rounded-2xl bg-background/50 border-white/5 font-mono text-sm focus-visible:ring-0 focus-visible:shadow-[0_0_30px_rgba(var(--primary),0.05)] transition-all outline-none"
+                       autoFocus
+                    />
+                 </div>
+                 <div className="flex items-center justify-center gap-2 pt-1">
+                    <span className="text-[10px] text-muted-foreground/60 font-bold uppercase tracking-widest leading-none">Generate Access:</span>
+                    <a 
+                       href="https://aistudio.google.com/app/apikey" 
+                       target="_blank" 
+                       rel="noreferrer"
+                       className="text-primary font-black text-[10px] uppercase tracking-widest hover:underline inline-flex items-center gap-1.5"
+                    >
+                       Google AI Studio <ExternalLink className="size-3" />
+                    </a>
+                 </div>
               </div>
 
               {error && (
-                <Alert variant="destructive">
-                  <AlertTitle>Setup failed</AlertTitle>
-                  <AlertDescription>{error}</AlertDescription>
+                <Alert variant="destructive" className="rounded-[1.5rem] border-destructive/20 bg-destructive/10 animate-in shake-in">
+                   <AlertTitle className="text-[10px] font-black uppercase tracking-widest">Access Refused</AlertTitle>
+                   <AlertDescription className="text-xs font-bold opacity-80">{error}</AlertDescription>
                 </Alert>
               )}
 
-              <Button type="submit" className="h-12 w-full cursor-pointer rounded-xl" disabled={isLoading}>
-                {isLoading ? 'Saving...' : 'Save and Continue'}
+              <Button type="submit" size="lg" className="w-full h-16 rounded-2xl font-black uppercase tracking-[0.2em] text-xs shadow-2xl shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.95] bg-primary ring-4 ring-primary/10" disabled={isLoading}>
+                 {isLoading ? (
+                   <span className="flex items-center gap-3">
+                     <LoaderCircle className="size-5 animate-spin" /> Verifying Connection...
+                   </span>
+                 ) : 'Enable Research Core'}
               </Button>
-            </form>
-          </div>
+           </form>
+
+           <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                 <Separator className="w-full" />
+              </div>
+              <div className="relative flex justify-center text-[9px] font-black uppercase tracking-[0.4em] text-muted-foreground/30 bg-card rounded-full px-4 mx-auto w-fit">
+                 Protocol Security
+              </div>
+           </div>
+
+           <div className="grid grid-cols-2 gap-8 text-center pt-2">
+              <div className="space-y-2 group">
+                 <div className="size-12 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mx-auto mb-1 transition-transform group-hover:scale-110">
+                    <ShieldCheck className="size-6" />
+                 </div>
+                 <p className="text-[10px] font-black uppercase tracking-widest text-zinc-900 dark:text-zinc-100">End-to-End</p>
+                 <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-widest opacity-60">Vault Enforced</p>
+              </div>
+              <div className="space-y-2 group">
+                 <div className="size-12 rounded-2xl bg-blue-500/10 text-blue-500 flex items-center justify-center mx-auto mb-1 transition-transform group-hover:scale-110">
+                    <Bot className="size-6" />
+                 </div>
+                 <p className="text-[10px] font-black uppercase tracking-widest text-zinc-900 dark:text-zinc-100">System Ready</p>
+                 <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-widest opacity-60">Grounded Logic</p>
+              </div>
+           </div>
         </CardContent>
-        </Card>
+      </Card>
+      
+      <div className="mt-10 flex flex-col items-center gap-2 opacity-30">
+         <p className="text-[9px] text-muted-foreground font-black uppercase tracking-[0.4em] italic">
+            Built with grounded intelligence
+         </p>
+         <div className="h-px w-24 bg-muted-foreground/30" />
       </div>
     </div>
   );

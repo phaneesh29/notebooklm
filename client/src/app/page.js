@@ -1,22 +1,22 @@
 'use client';
 
 import Link from 'next/link';
-import { SignInButton, UserButton, useAuth } from '@clerk/nextjs';
+import { SignInButton, useAuth } from '@clerk/nextjs';
 import { useEffect, useState } from 'react';
-import {
-  AlertTriangle,
-  ArrowRight,
-  Bot,
-  FolderKanban,
-  KeyRound,
-  Plus,
-  Sparkles,
-  Trash2,
-  Upload,
+import { 
+  ArrowRight, 
+  Bot, 
+  Compass, 
+  FolderKanban, 
+  KeyRound, 
+  LoaderCircle,
+  Plus, 
+  Sparkles, 
+  Trash2, 
+  Zap 
 } from 'lucide-react';
 
 import AuthGuard from '@/components/AuthGuard';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,354 +24,265 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiRequest } from '@/lib/api';
 
-const compactHighlights = [
-  { title: 'Link or upload', icon: Upload },
-  { title: 'Organize by group', icon: FolderKanban },
-  { title: 'Ask for answers', icon: Sparkles },
-];
-
 export default function Home() {
   const { getToken, isSignedIn, isLoaded } = useAuth();
   const [profile, setProfile] = useState(null);
   const [groups, setGroups] = useState([]);
   const [groupTitle, setGroupTitle] = useState('');
-  const [pageError, setPageError] = useState('');
-  const [groupError, setGroupError] = useState('');
-  const [groupMessage, setGroupMessage] = useState('');
-  const [isBooting, setIsBooting] = useState(true);
-  const [isCreatingGroup, setIsCreatingGroup] = useState(false);
-  const [deletingGroupId, setDeletingGroupId] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCreating, setIsCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState('');
 
   useEffect(() => {
-    if (!isLoaded) {
-      return;
-    }
-
-    if (!isSignedIn) {
-      setIsBooting(false);
+    if (!isLoaded || !isSignedIn) {
+      if (isLoaded) setIsLoading(false);
       return;
     }
 
     const loadDashboard = async () => {
       try {
-        setPageError('');
         const token = await getToken();
-        const [profileResponse, groupsResponse] = await Promise.all([
+        const [profileRes, groupsRes] = await Promise.all([
           apiRequest('/auth/users/me', { token }),
           apiRequest('/groups', { token }),
         ]);
-
-        setProfile(profileResponse.data ?? null);
-        setGroups(groupsResponse.data ?? []);
+        setProfile(profileRes.data);
+        setGroups(groupsRes.data || []);
       } catch (err) {
-        setPageError(err.message);
+        console.error(err);
       } finally {
-        setIsBooting(false);
+        setIsLoading(false);
       }
     };
 
     loadDashboard();
   }, [getToken, isLoaded, isSignedIn]);
 
-  const handleCreateGroup = async (event) => {
-    event.preventDefault();
-
-    if (!groupTitle.trim()) {
-      setGroupError('Group title is required');
-      return;
-    }
-
+  const handleCreateGroup = async (e) => {
+    e.preventDefault();
+    if (!groupTitle.trim()) return;
     try {
-      setIsCreatingGroup(true);
-      setGroupError('');
-      setGroupMessage('');
+      setIsCreating(true);
       const token = await getToken();
-      const response = await apiRequest('/groups', {
+      const res = await apiRequest('/groups', {
         method: 'POST',
         token,
         body: JSON.stringify({ title: groupTitle }),
       });
-
-      setGroups((currentGroups) => [response.data, ...currentGroups]);
+      setGroups([res.data, ...groups]);
       setGroupTitle('');
-      setGroupMessage(response.message || 'Group created successfully');
     } catch (err) {
-      setGroupError(err.message);
+      console.error(err);
     } finally {
-      setIsCreatingGroup(false);
+      setIsCreating(false);
     }
   };
 
-  const handleDeleteGroup = async (groupId) => {
+  const handleDeleteGroup = async (id) => {
     try {
-      setDeletingGroupId(groupId);
-      setGroupError('');
-      setGroupMessage('');
+      setDeletingId(id);
       const token = await getToken();
-      const response = await apiRequest(`/groups/${groupId}`, {
-        method: 'DELETE',
-        token,
-      });
-
-      setGroups((currentGroups) => currentGroups.filter((group) => group.id !== groupId));
-      setGroupMessage(response.message || 'Group deleted successfully');
+      await apiRequest(`/groups/${id}`, { method: 'DELETE', token });
+      setGroups(groups.filter(g => g.id !== id));
     } catch (err) {
-      setGroupError(err.message);
+      console.error(err);
     } finally {
-      setDeletingGroupId('');
+      setDeletingId('');
     }
   };
 
   if (!isLoaded) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-4">
-        <div className="w-full max-w-xl space-y-4">
-          <Skeleton className="h-12 w-full rounded-2xl" />
-          <Skeleton className="h-48 w-full rounded-[2rem]" />
-        </div>
+      <div className="flex-1 flex items-center justify-center">
+        <LoaderCircle className="size-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
+  // --- Guest Landing Page ---
+  if (!isSignedIn) {
+    return (
+      <div className="flex-1 flex flex-col items-center">
+        {/* Hero Section */}
+        <section className="w-full max-w-5xl px-6 py-24 sm:py-32 flex flex-col items-center text-center gap-8 animate-in fade-in slide-in-from-bottom-8 duration-1000 bg-[radial-gradient(circle_at_50%_0%,rgba(63,63,70,0.05),transparent_50%)]">
+          <Badge variant="secondary" className="rounded-full px-4 py-1.5 text-xs font-black uppercase tracking-widest bg-primary/10 text-primary border-primary/20">
+             Next-Gen AI Research
+          </Badge>
+          <h1 className="text-5xl sm:text-7xl font-black tracking-tighter bg-gradient-to-b from-zinc-950 to-zinc-600 dark:from-white dark:to-zinc-500 bg-clip-text text-transparent leading-[1.1]">
+             Your Intelligence, <br /> Organized.
+          </h1>
+          <p className="max-w-2xl text-lg text-muted-foreground leading-relaxed font-medium">
+            NotebookLM-style workspaces that ground Gemini in your own sources. Link files, YouTube, or web pages and get answers that never hallucinate.
+          </p>
+          <div className="flex items-center gap-4 pt-4">
+            <SignInButton mode="modal">
+               <Button size="lg" className="rounded-full h-14 px-8 font-black shadow-2xl transition-all hover:scale-105 active:scale-95 bg-primary ring-4 ring-primary/10">
+                 Get Started Free <ArrowRight className="size-4 ml-2" />
+               </Button>
+            </SignInButton>
+            <Button size="lg" variant="outline" className="rounded-full h-14 px-8 font-black hover:bg-muted border-white/10" asChild>
+               <Link href="/onboarding">Setup Guide</Link>
+            </Button>
+          </div>
+        </section>
+
+        {/* Feature Grid */}
+        <section className="w-full max-w-7xl px-6 pb-24 grid grid-cols-1 md:grid-cols-3 gap-8 animate-in fade-in duration-1000 delay-300">
+           {[
+             { title: 'Grounded Responses', desc: 'AI answers based strictly on the documents you provide.', icon: Sparkles, color: 'text-amber-500' },
+             { title: 'Multi-Source Groups', desc: 'Organize research by project. Mix PDFs, links, and docs.', icon: FolderKanban, color: 'text-blue-500' },
+             { title: 'Secure & Private', desc: 'Your data stays within your authenticated workspaces.', icon: KeyRound, color: 'text-emerald-500' },
+           ].map((feat, i) => (
+             <Card key={i} className="rounded-[3rem] p-6 bg-card/60 backdrop-blur-md border-white/10 shadow-sm transition-all hover:bg-card/80 hover:ring-1 ring-primary/20 hover:shadow-2xl">
+                <CardHeader className="p-0">
+                   <div className={`p-4 rounded-[1.2rem] bg-background shadow-inner w-fit ${feat.color}`}>
+                     <feat.icon className="size-6" />
+                   </div>
+                   <CardTitle className="pt-6 text-2xl font-black tracking-tight">{feat.title}</CardTitle>
+                   <CardDescription className="text-sm font-medium leading-relaxed pt-2">{feat.desc}</CardDescription>
+                </CardHeader>
+             </Card>
+           ))}
+        </section>
+      </div>
+    );
+  }
+
+  // --- User Dashboard ---
   return (
     <AuthGuard>
-      <div className="min-h-screen px-4 py-8 text-zinc-950 dark:text-zinc-50 sm:px-6 lg:px-8">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-          {!isSignedIn ? (
-            <section className="overflow-hidden rounded-[2rem] border border-white/70 bg-white/78 shadow-[0_30px_80px_rgba(15,23,42,0.08)] backdrop-blur dark:border-white/10 dark:bg-white/5">
-              <div className="grid gap-8 px-8 py-10 lg:grid-cols-[1.15fr_0.85fr] lg:px-12 lg:py-14">
-                <div className="flex flex-col gap-6">
-                  <Badge variant="outline" className="w-fit rounded-full px-3 py-1 uppercase tracking-[0.24em]">
-                    <Bot className="size-3.5" />
-                    AI Workspace
-                  </Badge>
-                  <div className="flex flex-col gap-3">
-                    <h1 className="max-w-3xl text-4xl font-semibold tracking-[-0.06em] sm:text-5xl lg:text-6xl">
-                      Your NotebookLM-style workspace.
-                    </h1>
-                    <p className="max-w-lg text-base text-zinc-600 dark:text-zinc-300">
-                      Groups, sources, answers.
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-3 sm:flex-row">
-                    <SignInButton mode="modal">
-                      <button className="inline-flex h-12 items-center justify-center rounded-full bg-primary px-6 text-sm font-medium text-primary-foreground transition hover:opacity-90">
-                        Open app
-                      </button>
-                    </SignInButton>
-                    <Link
-                      href="/onboarding"
-                      className="inline-flex h-12 items-center justify-center rounded-full border border-border bg-white/80 px-6 text-sm font-medium text-zinc-700 transition hover:bg-white dark:bg-transparent dark:text-zinc-200 dark:hover:bg-white/5"
-                    >
-                      Setup
-                    </Link>
-                  </div>
-                </div>
+      <div className="flex-1 flex flex-col pt-8 pb-12 px-4 sm:px-8 max-w-7xl mx-auto w-full gap-10 animate-in fade-in duration-700 bg-[radial-gradient(circle_at_50%_0%,rgba(63,63,70,0.03),transparent_40%)]">
+        <header className="flex flex-col gap-3">
+          <div className="flex items-center gap-2 text-[10px] font-black tracking-[0.2em] uppercase text-muted-foreground/40">
+             <span className="text-primary/60">Intelligence</span>
+             <span className="opacity-40">/</span>
+             <span>Dashboard</span>
+          </div>
+          <h1 className="text-4xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">
+            Welcome back, {profile?.username || 'Researcher'}
+          </h1>
+          <p className="text-muted-foreground font-bold text-sm">You have {groups.length} active research workspaces ready for interaction.</p>
+        </header>
 
-                <div className="grid gap-3">
-                  {compactHighlights.map((item) => {
-                    const Icon = item.icon;
+        <section className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-12">
+          <div className="space-y-8">
+            <div className="flex items-center justify-between">
+              <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40">Your Notebooks</h2>
+              <Button asChild variant="ghost" size="sm" className="rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-primary/5 hover:text-primary transition-all">
+                 <Link href="/groups">View All Workspaces</Link>
+              </Button>
+            </div>
 
-                    return (
-                      <Card key={item.title} className="rounded-[1.6rem] bg-white/72 py-0 dark:bg-white/6">
-                        <CardHeader className="pb-4">
-                          <div className="mb-2 inline-flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                            <Icon />
-                          </div>
-                          <CardTitle className="text-lg font-semibold">{item.title}</CardTitle>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+               {isLoading ? (
+                 Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-44 rounded-[3rem]" />)
+               ) : groups.length === 0 ? (
+                 <div className="col-span-full py-20 flex flex-col items-center justify-center gap-6 bg-muted/5 border-2 border-dashed border-zinc-500/10 rounded-[3rem] opacity-60">
+                    <FolderKanban className="size-12 text-muted-foreground/20" />
+                    <p className="font-black uppercase text-xs tracking-widest">No Active Notebooks</p>
+                    <Button variant="outline" className="rounded-full px-6 text-[10px] font-black uppercase tracking-widest" onClick={() => document.getElementById('new-group-input')?.focus()}>
+                       Initialize First Workspace
+                    </Button>
+                 </div>
+               ) : (
+                 groups.slice(0, 4).map((g) => (
+                   <Card key={g.id} className="rounded-[2.5rem] group hover:shadow-[0_40px_80px_rgba(0,0,0,0.1)] transition-all duration-700 hover:-translate-y-1 bg-card/60 backdrop-blur-md border-white/10 ring-1 ring-zinc-500/5 hover:ring-primary/20 relative overflow-hidden">
+                      <Link href={`/group/${g.id}`} className="block">
+                        <CardHeader className="p-7">
+                           <div className="flex items-center justify-between mb-4">
+                              <div className="p-3.5 rounded-2xl bg-primary/10 text-primary shadow-inner">
+                                 <FolderKanban className="size-5" />
+                              </div>
+                              <Badge variant="outline" className="rounded-full text-[8px] font-black uppercase tracking-[0.2em] px-2.5 py-0.5 bg-background/50 border-white/10">Notebook</Badge>
+                           </div>
+                           <CardTitle className="pt-2 text-2xl font-black tracking-tighter group-hover:text-primary transition-colors">{g.title}</CardTitle>
+                           <CardDescription className="truncate text-[10px] font-mono uppercase tracking-widest opacity-40 pt-2">{g.id}</CardDescription>
                         </CardHeader>
-                      </Card>
-                    );
-                  })}
-                </div>
-              </div>
-            </section>
-          ) : (
-            <>
-              <section className="overflow-hidden rounded-[2rem] border border-white/70 bg-white/78 shadow-[0_30px_80px_rgba(15,23,42,0.08)] backdrop-blur dark:border-white/10 dark:bg-white/5">
-                <div className="grid gap-6 px-6 py-7 lg:grid-cols-[1.15fr_0.85fr] lg:px-8 lg:py-8">
-                  <div className="flex flex-col gap-6">
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                      <div className="flex flex-col gap-3">
-                        <Badge variant="outline" className="w-fit rounded-full px-3 py-1 uppercase tracking-[0.24em]">
-                          <Bot className="size-3.5" />
-                          Workspace
-                        </Badge>
-                        <div className="flex flex-wrap gap-2">
-                          <Badge variant={profile?.hasApiKey ? 'success' : 'warning'}>
-                            {profile?.hasApiKey ? 'API connected' : 'API required'}
-                          </Badge>
-                          <Badge variant="secondary">{groups.length} groups</Badge>
-                        </div>
+                      </Link>
+                      <CardContent className="flex justify-between items-center p-7 pt-2 border-t bg-muted/5">
+                         <span className="text-[9px] font-black text-muted-foreground/30 uppercase tracking-[0.3em] italic">Active Flow</span>
+                         <Button 
+                           variant="ghost" 
+                           size="icon" 
+                           className="size-10 rounded-2xl text-zinc-300 hover:text-destructive hover:bg-destructive/10 transition-all active:scale-90"
+                           disabled={deletingId === g.id}
+                           onClick={() => handleDeleteGroup(g.id)}
+                         >
+                           <Trash2 className="size-4" />
+                         </Button>
+                      </CardContent>
+                      <div className="absolute -bottom-6 -right-6 p-10 opacity-[0.02] pointer-events-none rotate-12 group-hover:rotate-45 transition-transform duration-1000">
+                        <Zap className="size-24" />
                       </div>
-                      <UserButton appearance={{ elements: { userButtonAvatarBox: 'h-11 w-11 ring-2 ring-white/80 shadow-sm' } }} />
-                    </div>
+                   </Card>
+                 ))
+               )}
+            </div>
+          </div>
 
-                    <div className="flex flex-col gap-3">
-                      <h1 className="max-w-3xl text-4xl font-semibold tracking-[-0.06em] sm:text-5xl">
-                        Build with sources, not guesses.
-                      </h1>
-                      <p className="max-w-xl text-sm text-zinc-600 dark:text-zinc-300">
-                        One dashboard for groups, uploads, and grounded answers.
-                      </p>
-                    </div>
+          <aside className="space-y-10 pl-2 lg:pl-10">
+             <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                   <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40 whitespace-nowrap leading-none">Intelligence Hub</h2>
+                   <div className="h-px flex-1 bg-border/40" />
+                </div>
 
-                    <div className="flex flex-wrap gap-3">
-                      <Button asChild className="h-12 rounded-full px-6">
-                        <Link href="/groups">
-                          Open groups
-                          <ArrowRight data-icon="inline-end" />
+                <Card className="rounded-[3rem] bg-zinc-950 text-white shadow-2xl overflow-hidden relative shadow-primary/20 ring-4 ring-zinc-500/10">
+                   <div className="absolute top-0 right-0 p-6 opacity-10 rotate-12 scale-150 pointer-events-none">
+                     <Zap className="size-32" />
+                   </div>
+                   <CardHeader className="p-8 pb-4 relative z-10">
+                      <CardTitle className="text-2xl font-black tracking-tight">Fast Research</CardTitle>
+                      <CardDescription className="text-zinc-400 font-medium pt-1">Initialize a ground-ready notebook instantly.</CardDescription>
+                   </CardHeader>
+                   <CardContent className="p-8 pt-4 space-y-6 relative z-10">
+                   <form onSubmit={handleCreateGroup} className="space-y-4">
+                         <div className="relative group">
+                            <div className="absolute inset-0 rounded-2xl ring-1 ring-white/10 transition-all pointer-events-none" />
+                            <Input 
+                              id="new-group-input"
+                              placeholder="E.g. Quantum Computing" 
+                              className="bg-white/5 border-white/5 text-white placeholder:text-white/30 rounded-2xl h-14 px-5 font-bold tracking-tight focus-visible:ring-0 outline-none"
+                              value={groupTitle}
+                              onChange={(e) => setGroupTitle(e.target.value)}
+                            />
+                         </div>
+                         <Button type="submit" className="w-full h-14 rounded-2xl bg-white text-zinc-950 hover:bg-zinc-200 font-black uppercase tracking-widest text-xs shadow-xl active:scale-95 transition-all" disabled={isCreating}>
+                           {isCreating ? <LoaderCircle className="animate-spin" /> : 'Launch Notebook'}
+                         </Button>
+                      </form>
+                   </CardContent>
+                </Card>
+
+                <Card className="rounded-[2.5rem] bg-card/60 backdrop-blur-md border-white/10 ring-1 ring-zinc-500/5 shadow-sm overflow-hidden">
+                   <CardHeader className="p-7 pb-4">
+                      <div className="flex items-center gap-3">
+                         <div className="p-3 bg-primary/10 text-primary rounded-2xl">
+                            <KeyRound className="size-5" />
+                         </div>
+                         <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60">System Security</span>
+                      </div>
+                   </CardHeader>
+                   <CardContent className="px-7 pb-7 pt-4 space-y-4">
+                      <div className="flex items-center justify-between p-4 rounded-[1.5rem] bg-background/50 border border-white/5 shadow-inner">
+                         <span className="text-xs font-bold text-muted-foreground/80">API Gateway</span>
+                         <Badge variant={profile?.hasApiKey ? 'success' : 'warning'} className="rounded-full px-3 py-1 font-black text-[9px] uppercase tracking-widest">
+                           {profile?.hasApiKey ? 'Connected' : 'Missing'}
+                         </Badge>
+                      </div>
+                      <Button size="sm" className={`w-full h-11 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-xl active:scale-95 ${profile?.hasApiKey ? 'bg-zinc-800 hover:bg-zinc-700 text-white' : 'bg-amber-500 hover:bg-amber-600 text-white'}`} asChild>
+                        <Link href={profile?.hasApiKey ? '/profile' : '/onboarding'}>
+                          {profile?.hasApiKey ? 'Update Gateway Key' : 'Activate Access'}
                         </Link>
                       </Button>
-                      <Button asChild variant="outline" className="h-12 rounded-full px-6">
-                        <Link href="/profile">Profile</Link>
-                      </Button>
-                    </div>
-                  </div>
-
-                  <Card className="rounded-[1.8rem] bg-white/72 py-0 dark:bg-white/6">
-                    <CardHeader className="pb-3">
-                      <div className="mb-2 inline-flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                        <KeyRound />
-                      </div>
-                      <CardTitle className="truncate text-2xl font-semibold tracking-tight">
-                        {profile?.username || profile?.email || 'Authenticated'}
-                      </CardTitle>
-                      <CardDescription>Account overview</CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex flex-col gap-3 pb-6 text-sm text-zinc-600 dark:text-zinc-300">
-                      <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/60 px-4 py-3">
-                        <span>API</span>
-                        <Badge variant={profile?.hasApiKey ? 'success' : 'warning'}>
-                          {profile?.hasApiKey ? 'Ready' : 'Missing'}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/60 px-4 py-3">
-                        <span>Groups</span>
-                        <span className="font-medium text-zinc-900 dark:text-zinc-100">{groups.length}</span>
-                      </div>
-                      <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/60 px-4 py-3">
-                        <span>Status</span>
-                        <Badge variant="secondary">Live</Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </section>
-
-              <section className="grid gap-6 lg:grid-cols-[0.84fr_1.16fr]">
-                <Card className="rounded-[1.8rem] bg-white/78 py-0 dark:bg-white/5">
-                  <CardHeader className="pb-3">
-                    <div className="mb-2 inline-flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                      <Plus />
-                    </div>
-                    <CardTitle className="text-xl font-semibold">Create group</CardTitle>
-                    <CardDescription>Keep it short.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="pb-6">
-                    <form onSubmit={handleCreateGroup} className="flex flex-col gap-3">
-                      <Input
-                        value={groupTitle}
-                        onChange={(event) => setGroupTitle(event.target.value)}
-                        placeholder="e.g. AI Research"
-                        className="h-12 rounded-2xl bg-white/90 dark:bg-zinc-900/70"
-                      />
-                      <Button type="submit" disabled={isCreatingGroup} className="h-12 rounded-2xl">
-                        <Plus data-icon="inline-start" />
-                        {isCreatingGroup ? 'Creating...' : 'Create group'}
-                      </Button>
-                    </form>
-                  </CardContent>
+                      <p className="text-[9px] text-muted-foreground/40 font-bold text-center uppercase tracking-widest px-4 leading-relaxed">
+                        Securely grounded in your local identity.
+                      </p>
+                   </CardContent>
                 </Card>
-
-                <Card className="rounded-[1.8rem] bg-white/78 py-0 dark:bg-white/5">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex flex-col gap-1">
-                        <CardTitle className="text-xl font-semibold">Recent groups</CardTitle>
-                        <CardDescription>Open one and start uploading.</CardDescription>
-                      </div>
-                      <Button asChild variant="ghost" className="rounded-full">
-                        <Link href="/groups">View all</Link>
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-4 pb-6">
-                    {isBooting ? (
-                      <div className="flex flex-col gap-4 rounded-[1.5rem] border border-dashed border-zinc-300 bg-zinc-50/60 p-5 dark:border-zinc-700 dark:bg-white/5">
-                        <Skeleton className="h-6 w-44" />
-                        <Skeleton className="h-24 w-full rounded-[1.25rem]" />
-                        <Skeleton className="h-24 w-full rounded-[1.25rem]" />
-                      </div>
-                    ) : groups.length === 0 ? (
-                      <div className="rounded-[1.6rem] border border-dashed border-zinc-300 bg-white/65 px-6 py-14 text-center dark:border-zinc-700 dark:bg-white/5">
-                        <div className="mx-auto mb-4 inline-flex size-12 items-center justify-center rounded-2xl bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
-                          <FolderKanban />
-                        </div>
-                        <h2 className="text-xl font-semibold text-zinc-950 dark:text-zinc-50">No groups yet</h2>
-                        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Create your first workspace.</p>
-                      </div>
-                    ) : (
-                      groups.slice(0, 3).map((group) => (
-                        <div
-                          key={group.id}
-                          className="flex flex-col gap-4 rounded-[1.6rem] border border-white/70 bg-white/88 p-5 transition hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-[0_24px_60px_rgba(59,130,246,0.12)] dark:border-white/10 dark:bg-white/6 sm:flex-row sm:items-center sm:justify-between"
-                        >
-                          <Link href={`/group/${group.id}`} className="min-w-0 flex-1">
-                            <div className="flex items-center gap-4">
-                              <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                                <FolderKanban />
-                              </div>
-                              <div className="min-w-0">
-                                <h2 className="truncate text-2xl font-semibold tracking-[-0.03em] text-zinc-950 dark:text-zinc-50">
-                                  {group.title}
-                                </h2>
-                                <p className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">{group.id}</p>
-                              </div>
-                            </div>
-                          </Link>
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            disabled={deletingGroupId === group.id}
-                            onClick={() => handleDeleteGroup(group.id)}
-                            className="h-11 rounded-full px-5"
-                          >
-                            <Trash2 data-icon="inline-start" />
-                            {deletingGroupId === group.id ? 'Deleting...' : 'Delete'}
-                          </Button>
-                        </div>
-                      ))
-                    )}
-                  </CardContent>
-                </Card>
-              </section>
-
-              {pageError && (
-                <Alert variant="destructive" className="rounded-[1.5rem] border-red-200 bg-red-50 shadow-sm dark:border-red-900/30 dark:bg-red-950/20">
-                  <AlertTriangle />
-                  <AlertTitle>Dashboard failed to load</AlertTitle>
-                  <AlertDescription>{pageError}</AlertDescription>
-                </Alert>
-              )}
-
-              {groupError && (
-                <Alert variant="destructive" className="rounded-[1.5rem] border-red-200 bg-red-50 shadow-sm dark:border-red-900/30 dark:bg-red-950/20">
-                  <AlertTriangle />
-                  <AlertTitle>Group action failed</AlertTitle>
-                  <AlertDescription>{groupError}</AlertDescription>
-                </Alert>
-              )}
-
-              {groupMessage && (
-                <Alert className="rounded-[1.5rem] border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-300">
-                  <AlertTitle>Updated</AlertTitle>
-                  <AlertDescription>{groupMessage}</AlertDescription>
-                </Alert>
-              )}
-            </>
-          )}
-        </div>
+             </div>
+          </aside>
+        </section>
       </div>
     </AuthGuard>
   );

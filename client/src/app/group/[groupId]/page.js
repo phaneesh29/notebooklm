@@ -4,7 +4,24 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
-import { AlertTriangle, ArrowLeft, Bot, FileText, Globe, Link2, LoaderCircle, PlayCircle, Send, Upload } from 'lucide-react';
+import { 
+  AlertTriangle, 
+  ArrowLeft, 
+  Bot, 
+  FileText, 
+  Globe, 
+  Link2, 
+  LoaderCircle, 
+  PanelLeft, 
+  PanelLeftOpen,
+  PlayCircle, 
+  Plus, 
+  Send, 
+  Upload, 
+  User, 
+  X,
+  Zap
+} from 'lucide-react';
 
 import AuthGuard from '@/components/AuthGuard';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -18,12 +35,6 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiRequest, API_BASE_URL } from '@/lib/api';
 
-const sourceTypes = [
-  { title: 'YouTube', icon: PlayCircle },
-  { title: 'Web', icon: Globe },
-  { title: 'Files', icon: FileText },
-];
-
 const statusBadgeVariant = {
   queued: 'warning',
   processing: 'secondary',
@@ -32,36 +43,16 @@ const statusBadgeVariant = {
 };
 
 function formatDocumentType(type) {
-  if (!type) {
-    return 'Document';
-  }
-
-  if (type === 'docx') {
-    return 'DOCX';
-  }
-
-  if (type === 'pdf' || type === 'txt') {
-    return type.toUpperCase();
-  }
-
-  if (type === 'youtube') {
-    return 'YouTube';
-  }
-
-  if (type === 'web') {
-    return 'Web';
-  }
-
+  if (!type) return 'Document';
+  if (type === 'docx') return 'DOCX';
+  if (type === 'pdf' || type === 'txt') return type.toUpperCase();
+  if (type === 'youtube') return 'YouTube';
+  if (type === 'web') return 'Web';
   return type;
-}
-
-function formatDocumentSource(document) {
-  return document.sourceUrl || document.originalFileName || 'Stored document';
 }
 
 function parseSseChunk(chunk) {
   const event = { type: 'message', data: '' };
-
   chunk.split('\n').forEach((line) => {
     if (line.startsWith('event:')) {
       event.type = line.slice(6).trim();
@@ -70,7 +61,6 @@ function parseSseChunk(chunk) {
       event.data = event.data ? `${event.data}\n${value}` : value;
     }
   });
-
   return event;
 }
 
@@ -87,12 +77,12 @@ export default function GroupDetailPage() {
   const [chatQuery, setChatQuery] = useState('');
   const [chatError, setChatError] = useState('');
   const [pageError, setPageError] = useState('');
-  const [feedbackMessage, setFeedbackMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isStreamingChat, setIsStreamingChat] = useState(false);
   const [isSubmittingLink, setIsSubmittingLink] = useState(false);
   const [isSubmittingFile, setIsSubmittingFile] = useState(false);
-  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [showAddSource, setShowAddSource] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [linkForm, setLinkForm] = useState({ title: '', sourceUrl: '', type: 'web' });
   const [fileForm, setFileForm] = useState({ title: '', file: null });
 
@@ -119,9 +109,7 @@ export default function GroupDetailPage() {
         ]);
         const matchedGroup = (groupsResponse.data ?? []).find((item) => item.id === groupId);
 
-        if (!matchedGroup) {
-          throw new Error('Group not found');
-        }
+        if (!matchedGroup) throw new Error('Group not found');
 
         setGroup(matchedGroup);
         setDocuments(documentsResponse.data ?? []);
@@ -137,15 +125,9 @@ export default function GroupDetailPage() {
   }, [getToken, groupId]);
 
   useEffect(() => {
-    if (!groupId || isLoading) {
-      return undefined;
-    }
-
-    const hasActiveDocuments = documents.some((document) => document.status === 'queued' || document.status === 'processing');
-
-    if (!hasActiveDocuments) {
-      return undefined;
-    }
+    if (!groupId || isLoading) return undefined;
+    const hasActiveDocuments = documents.some((doc) => doc.status === 'queued' || doc.status === 'processing');
+    if (!hasActiveDocuments) return undefined;
 
     const intervalId = setInterval(async () => {
       try {
@@ -160,64 +142,28 @@ export default function GroupDetailPage() {
   }, [documents, getToken, groupId, isLoading]);
 
   useEffect(() => {
-    if (!chatViewportRef.current) {
-      return;
+    if (chatViewportRef.current) {
+      chatViewportRef.current.scrollTop = chatViewportRef.current.scrollHeight;
     }
-
-    chatViewportRef.current.scrollTop = chatViewportRef.current.scrollHeight;
   }, [chatMessages]);
 
-  const handleLinkChange = (event) => {
-    const { name, value } = event.target;
-    setLinkForm((currentForm) => ({ ...currentForm, [name]: value }));
-  };
+  const handleLinkChange = (e) => setLinkForm({ ...linkForm, [e.target.name]: e.target.value });
+  const handleFileSelection = (e) => setFileForm({ ...fileForm, file: e.target.files?.[0] ?? null });
 
-  const handleFileTitleChange = (event) => {
-    setFileForm((currentForm) => ({ ...currentForm, title: event.target.value }));
-  };
-
-  const setSelectedFile = (selectedFile) => {
-    setFileForm((currentForm) => ({ ...currentForm, file: selectedFile }));
-  };
-
-  const handleFileSelection = (event) => {
-    setSelectedFile(event.target.files?.[0] ?? null);
-  };
-
-  const handleFileDrop = (event) => {
-    event.preventDefault();
-    setIsDraggingFile(false);
-    setSelectedFile(event.dataTransfer.files?.[0] ?? null);
-  };
-
-  const handleSubmitLink = async (event) => {
-    event.preventDefault();
-
-    if (!linkForm.title.trim() || !linkForm.sourceUrl.trim()) {
-      setPageError('Link title and URL are required');
-      return;
-    }
-
+  const handleSubmitLink = async (e) => {
+    e.preventDefault();
+    if (!linkForm.title.trim() || !linkForm.sourceUrl.trim()) return;
     try {
       setIsSubmittingLink(true);
-      setPageError('');
-      setFeedbackMessage('');
-
       const token = await getToken();
-      const response = await apiRequest('/groups/documents/links', {
+      await apiRequest('/groups/documents/links', {
         method: 'POST',
         token,
-        body: JSON.stringify({
-          groupId,
-          title: linkForm.title.trim(),
-          sourceUrl: linkForm.sourceUrl.trim(),
-          type: linkForm.type,
-        }),
+        body: JSON.stringify({ groupId, ...linkForm }),
       });
-
       setLinkForm({ title: '', sourceUrl: '', type: 'web' });
+      setShowAddSource(false);
       await loadDocuments(token);
-      setFeedbackMessage(response.message || 'Link document queued successfully');
     } catch (error) {
       setPageError(error.message);
     } finally {
@@ -225,37 +171,20 @@ export default function GroupDetailPage() {
     }
   };
 
-  const handleSubmitFile = async (event) => {
-    event.preventDefault();
-
-    if (!fileForm.file) {
-      setPageError('Choose a PDF, DOCX, or TXT file before uploading');
-      return;
-    }
-
+  const handleSubmitFile = async (e) => {
+    e.preventDefault();
+    if (!fileForm.file) return;
     try {
       setIsSubmittingFile(true);
-      setPageError('');
-      setFeedbackMessage('');
-
       const token = await getToken();
       const formData = new FormData();
       formData.append('groupId', groupId);
-      formData.append('title', fileForm.title.trim());
+      formData.append('title', (fileForm.title || fileForm.file.name).trim());
       formData.append('file', fileForm.file);
-
-      const response = await apiRequest('/groups/documents/files', {
-        method: 'POST',
-        token,
-        body: formData,
-      });
-
+      await apiRequest('/groups/documents/files', { method: 'POST', token, body: formData });
       setFileForm({ title: '', file: null });
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      setShowAddSource(false);
       await loadDocuments(token);
-      setFeedbackMessage(response.message || 'File uploaded and queued successfully');
     } catch (error) {
       setPageError(error.message);
     } finally {
@@ -263,23 +192,19 @@ export default function GroupDetailPage() {
     }
   };
 
-  const handleSubmitChat = async (event) => {
-    event.preventDefault();
-
+  const handleSubmitChat = async (e) => {
+    e.preventDefault();
     const trimmedQuery = chatQuery.trim();
-
-    if (!trimmedQuery || isStreamingChat) {
-      return;
-    }
+    if (!trimmedQuery || isStreamingChat) return;
 
     const userMessageId = `user-${Date.now()}`;
     const assistantMessageId = `assistant-${Date.now() + 1}`;
 
-    setChatError('');
     setChatQuery('');
+    setChatError('');
     setIsStreamingChat(true);
-    setChatMessages((currentMessages) => [
-      ...currentMessages,
+    setChatMessages((messages) => [
+      ...messages,
       { id: userMessageId, role: 'user', content: trimmedQuery },
       { id: assistantMessageId, role: 'assistant', content: '', isStreaming: true },
     ]);
@@ -295,420 +220,393 @@ export default function GroupDetailPage() {
         body: JSON.stringify({ query: trimmedQuery }),
       });
 
-      if (!response.ok) {
-        const errorBody = await response.json().catch(() => null);
-        throw new Error(errorBody?.message || 'Unable to start chat');
-      }
-
-      if (!response.body) {
-        throw new Error('Streaming response is unavailable');
-      }
-
+      if (!response.ok) throw new Error('Failed to start chat');
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
 
       while (true) {
         const { done, value } = await reader.read();
-
-        if (done) {
-          break;
-        }
-
+        if (done) break;
         buffer += decoder.decode(value, { stream: true });
         const chunks = buffer.split('\n\n');
         buffer = chunks.pop() ?? '';
-
         chunks.forEach((chunk) => {
-          if (!chunk.trim()) {
-            return;
-          }
-
-          const eventPayload = parseSseChunk(chunk);
-          const parsedData = eventPayload.data ? JSON.parse(eventPayload.data) : {};
-
-          if (eventPayload.type === 'delta') {
-            setChatMessages((currentMessages) => currentMessages.map((message) => (
-              message.id === assistantMessageId
-                ? { ...message, content: `${message.content}${parsedData.text || ''}`, isStreaming: true }
-                : message
-            )));
-          }
-
-          if (eventPayload.type === 'message' || eventPayload.type === 'done') {
-            setChatMessages((currentMessages) => currentMessages.map((message) => (
-              message.id === assistantMessageId
-                ? { ...message, content: parsedData.text || message.content, isStreaming: eventPayload.type !== 'done' }
-                : message
-            )));
-          }
-
-          if (eventPayload.type === 'error') {
-            throw new Error(parsedData.message || 'Chat stream failed');
-          }
+          if (!chunk.trim()) return;
+          const event = parseSseChunk(chunk);
+          const data = event.data ? JSON.parse(event.data) : {};
+          if (event.type === 'delta') {
+            setChatMessages((msgs) => msgs.map((m) => m.id === assistantMessageId ? { ...m, content: m.content + (data.text || '') } : m));
+          } else if (event.type === 'message' || event.type === 'done') {
+            setChatMessages((msgs) => msgs.map((m) => m.id === assistantMessageId ? { ...m, content: data.text || m.content } : m));
+          } else if (event.type === 'error') throw new Error(data.message || 'Stream error');
         });
       }
-
-      setChatMessages((currentMessages) => currentMessages.map((message) => (
-        message.id === assistantMessageId
-          ? { ...message, isStreaming: false }
-          : message
-      )));
     } catch (error) {
       setChatError(error.message);
-      setChatMessages((currentMessages) => currentMessages.map((message) => (
-        message.id === assistantMessageId
-          ? { ...message, isStreaming: false, content: message.content || 'I could not finish that response.' }
-          : message
-      )));
     } finally {
       setIsStreamingChat(false);
+      setChatMessages((msgs) => msgs.map((m) => m.id === assistantMessageId ? { ...m, isStreaming: false } : m));
     }
   };
 
   return (
     <AuthGuard>
-      <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-          <section className="overflow-hidden rounded-[2rem] border border-white/70 bg-white/78 shadow-[0_30px_80px_rgba(15,23,42,0.08)] backdrop-blur dark:border-white/10 dark:bg-white/5">
-            <div className="grid gap-6 px-6 py-7 lg:grid-cols-[1.15fr_0.85fr] lg:px-8 lg:py-8">
-              <div className="flex flex-col gap-5">
-                <Badge variant="outline" className="w-fit rounded-full px-3 py-1 uppercase tracking-[0.24em]">
-                  Group
-                </Badge>
-                <div className="flex flex-col gap-2">
-                  <h1 className="text-4xl font-semibold tracking-[-0.05em] text-zinc-950 dark:text-zinc-50 sm:text-5xl">
-                    Add sources fast.
-                  </h1>
-                  <p className="max-w-xl text-sm text-zinc-600 dark:text-zinc-300">
-                    Links, files, answers.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <Button asChild variant="outline" className="h-11 rounded-full px-5">
-                    <Link href="/groups">
-                      <ArrowLeft data-icon="inline-start" />
-                      Groups
-                    </Link>
-                  </Button>
-                  {sourceTypes.map((item) => {
-                    const Icon = item.icon;
+      <div className="flex h-screen bg-background overflow-hidden relative selection:bg-primary/20">
+        {/* Sidebar Trigger (When collapsed) */}
+        {isSidebarCollapsed && (
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="absolute left-6 top-5 z-50 rounded-xl bg-background/90 backdrop-blur shadow-[0_10px_30px_rgba(0,0,0,0.1)] border border-primary/20 text-primary hover:bg-background hover:scale-110 active:scale-95 transition-all animate-in fade-in slide-in-from-left-4 duration-500"
+            onClick={() => setIsSidebarCollapsed(false)}
+          >
+            <PanelLeftOpen className="size-5" />
+          </Button>
+        )}
 
-                    return (
-                      <Badge key={item.title} variant="secondary" className="h-11 rounded-full px-4 text-sm">
-                        <Icon className="size-4" />
-                        {item.title}
-                      </Badge>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <Card className="rounded-[1.8rem] bg-white/72 py-0 dark:bg-white/6">
-                <CardHeader className="pb-3">
-                  <CardDescription className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
-                    Workspace
-                  </CardDescription>
-                  {isLoading ? (
-                    <div className="flex flex-col gap-3">
-                      <Skeleton className="h-8 w-2/3" />
-                      <Skeleton className="h-5 w-full" />
-                    </div>
-                  ) : (
-                    <>
-                      <CardTitle className="break-all text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
-                        {group?.title || groupId}
-                      </CardTitle>
-                      <CardDescription className="break-all">{groupId}</CardDescription>
-                    </>
-                  )}
-                </CardHeader>
-                <CardContent className="flex flex-col gap-3 pb-6 text-sm text-zinc-600 dark:text-zinc-300">
-                  <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/60 px-4 py-3">
-                    <span>Links</span>
-                    <Badge variant="secondary">Ready</Badge>
-                  </div>
-                  <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/60 px-4 py-3">
-                    <span>Files</span>
-                    <Badge variant="secondary">Ready</Badge>
-                  </div>
-                  <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/60 px-4 py-3">
-                    <span>Stored docs</span>
-                    <Badge variant="outline">{documents.length}</Badge>
-                  </div>
-                </CardContent>
-              </Card>
+        {/* Sidebar: Sources */}
+        <aside className={`border-r bg-muted/40 flex flex-col backdrop-blur-3xl transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${isSidebarCollapsed ? 'w-0 border-none opacity-0 invisible' : 'w-80 opacity-100 visible'}`}>
+          <div className="p-4 border-b bg-card/60 backdrop-blur-xl flex items-center justify-between">
+            <Button variant="ghost" size="icon" className="rounded-full bg-muted/20 hover:bg-muted/40 transition-all active:scale-90" asChild>
+               <Link href="/groups"><ArrowLeft className="size-4" /></Link>
+            </Button>
+            <div className="flex-1 px-4 min-w-0">
+               <div className="flex items-center gap-2 text-[8px] font-black tracking-[0.2em] uppercase text-muted-foreground/40 mb-0.5">
+                  <span>Intelligence</span>
+                  <span className="opacity-40">/</span>
+                  <span className="text-primary/60 truncate max-w-[80px]">Research</span>
+               </div>
+               <h2 className="text-sm font-black truncate text-zinc-900 dark:text-zinc-100 uppercase tracking-tight leading-none pt-0.5">
+                {isLoading ? <Skeleton className="h-4 w-24" /> : group?.title}
+              </h2>
             </div>
-          </section>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="rounded-full flex-shrink-0 hover:bg-muted/40 transition-all"
+              onClick={() => setIsSidebarCollapsed(true)}
+            >
+              <PanelLeft className="size-4 opacity-40" />
+            </Button>
+          </div>
 
-          {pageError && (
-            <Alert variant="destructive" className="rounded-[1.5rem] border-red-200 bg-red-50 shadow-sm dark:border-red-900/30 dark:bg-red-950/20">
-              <AlertTriangle />
-              <AlertTitle>Document action failed</AlertTitle>
-              <AlertDescription>{pageError}</AlertDescription>
-            </Alert>
-          )}
-
-          {feedbackMessage && (
-            <Alert className="rounded-[1.5rem] border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-300">
-              <AlertTitle>Updated</AlertTitle>
-              <AlertDescription>{feedbackMessage}</AlertDescription>
-            </Alert>
-          )}
-
-          <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-            <Card className="rounded-[1.8rem] bg-white/78 py-0 dark:bg-white/5">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-xl font-semibold">Add link</CardTitle>
-                <CardDescription>Choose type, then submit.</CardDescription>
-              </CardHeader>
-              <CardContent className="pb-6">
-                <form onSubmit={handleSubmitLink} className="flex flex-col gap-4">
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="link-title">Title</Label>
-                    <Input
-                      id="link-title"
-                      name="title"
-                      value={linkForm.title}
-                      onChange={handleLinkChange}
-                      placeholder="Design systems"
-                      className="h-12 rounded-2xl bg-white/90 dark:bg-zinc-900/70"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="link-source-url">URL</Label>
-                    <Input
-                      id="link-source-url"
-                      name="sourceUrl"
-                      value={linkForm.sourceUrl}
-                      onChange={handleLinkChange}
-                      placeholder="https://..."
-                      className="h-12 rounded-2xl bg-white/90 dark:bg-zinc-900/70"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="link-type">Source type</Label>
-                    <Select
-                      id="link-type"
-                      name="type"
-                      value={linkForm.type}
-                      onChange={handleLinkChange}
-                      className="bg-white/90 dark:bg-zinc-900/70"
-                    >
-                      <option value="web">Web link</option>
-                      <option value="youtube">YouTube link</option>
-                    </Select>
-                  </div>
-
-                  <Button type="submit" disabled={isSubmittingLink} className="h-12 rounded-2xl">
-                    {linkForm.type === 'youtube' ? <PlayCircle data-icon="inline-start" /> : <Globe data-icon="inline-start" />}
-                    {isSubmittingLink ? 'Queueing...' : 'Add source'}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-[1.8rem] bg-white/78 py-0 dark:bg-white/5">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-xl font-semibold">Upload file</CardTitle>
-                <CardDescription>Drag and drop or browse.</CardDescription>
-              </CardHeader>
-              <CardContent className="pb-6">
-                <form onSubmit={handleSubmitFile} className="flex flex-col gap-4">
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="file-title">Title</Label>
-                    <Input
-                      id="file-title"
-                      value={fileForm.title}
-                      onChange={handleFileTitleChange}
-                      placeholder="Optional"
-                      className="h-12 rounded-2xl bg-white/90 dark:bg-zinc-900/70"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-2">
-                    <Label htmlFor="document-file">File</Label>
-                    <input
-                      ref={fileInputRef}
-                      id="document-file"
-                      type="file"
-                      accept=".pdf,.docx,.txt"
-                      onChange={handleFileSelection}
-                      className="sr-only"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      onDragOver={(event) => {
-                        event.preventDefault();
-                        setIsDraggingFile(true);
-                      }}
-                      onDragLeave={() => setIsDraggingFile(false)}
-                      onDrop={handleFileDrop}
-                      className={`flex min-h-36 flex-col items-center justify-center gap-3 rounded-[1.6rem] border border-dashed px-5 py-6 text-center transition ${
-                        isDraggingFile
-                          ? 'border-primary bg-primary/8 shadow-[0_18px_50px_rgba(59,130,246,0.14)]'
-                          : 'border-border/80 bg-background/60 hover:border-primary/30 hover:bg-background/90'
-                      }`}
-                    >
-                      <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                        <Upload className="size-5" />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                          Drop file here or click to browse
-                        </span>
-                        <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                          PDF, DOCX, TXT up to 25 MB
-                        </span>
-                      </div>
-                    </button>
-                  </div>
-
-                  {fileForm.file && (
-                    <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/60 px-4 py-3 text-sm">
-                      <span className="truncate pr-4 text-zinc-700 dark:text-zinc-200">{fileForm.file.name}</span>
-                      <Badge variant="outline">{Math.max(1, Math.round(fileForm.file.size / 1024))} KB</Badge>
-                    </div>
-                  )}
-
-                  <Button type="submit" disabled={isSubmittingFile} className="h-12 rounded-2xl">
-                    <Upload data-icon="inline-start" />
-                    {isSubmittingFile ? 'Uploading...' : 'Upload'}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-          </section>
-
-          <Card className="rounded-[1.8rem] bg-white/78 py-0 dark:bg-white/5">
-            <CardHeader className="pb-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <CardTitle className="text-xl font-semibold">Group chat</CardTitle>
-                  <CardDescription>Ask questions against this group with streaming replies.</CardDescription>
-                </div>
-                <Badge variant="secondary" className="rounded-full px-3 py-1">
-                  <Bot className="size-3.5" />
-                  Live SSE
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4 pb-6">
-              {chatError && (
-                <Alert variant="destructive">
-                  <AlertTitle>Chat failed</AlertTitle>
-                  <AlertDescription>{chatError}</AlertDescription>
-                </Alert>
-              )}
-
-              <div
-                ref={chatViewportRef}
-                className="flex max-h-[28rem] min-h-[20rem] flex-col gap-3 overflow-y-auto rounded-[1.6rem] border border-border/70 bg-background/60 p-4"
-              >
-                {chatMessages.length === 0 ? (
-                  <div className="flex h-full flex-col items-center justify-center gap-3 rounded-[1.4rem] border border-dashed border-border/80 bg-white/70 px-6 py-10 text-center dark:bg-white/5">
-                    <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                      <Bot className="size-5" />
-                    </div>
-                    <div className="space-y-1">
-                      <h2 className="text-lg font-semibold text-zinc-950 dark:text-zinc-50">Start the first question</h2>
-                      <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                        The server will use the last few stored turns automatically.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  chatMessages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
-                      <div
-                        className={`max-w-[85%] rounded-[1.4rem] px-4 py-3 text-sm shadow-sm ${
-                          message.role === 'user'
-                            ? 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950'
-                            : 'border border-border/70 bg-white text-zinc-800 dark:bg-zinc-900/80 dark:text-zinc-100'
-                        }`}
-                      >
-                        <div className="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] opacity-70">
-                          {message.role === 'user' ? 'You' : 'Assistant'}
-                          {message.isStreaming && <LoaderCircle className="size-3 animate-spin" />}
-                        </div>
-                        <p className="whitespace-pre-wrap leading-6">
-                          {message.content || (message.isStreaming ? 'Thinking...' : '')}
-                        </p>
-                      </div>
-                    </div>
-                  ))
-                )}
+          <div className="flex-1 overflow-y-auto p-5 space-y-8 scrollbar-none bg-[radial-gradient(circle_at_0%_0%,rgba(63,63,70,0.02),transparent_40%)]">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/40">Grounded Logic</h3>
+                <Badge variant="secondary" className="rounded-full text-[9px] font-black px-2 h-5 bg-primary/10 text-primary border-primary/5">{documents.length}</Badge>
               </div>
 
-              <form onSubmit={handleSubmitChat} className="flex flex-col gap-3 sm:flex-row">
-                <Input
-                  value={chatQuery}
-                  onChange={(event) => setChatQuery(event.target.value)}
-                  placeholder="Ask about the documents in this group..."
-                  disabled={isStreamingChat}
-                  className="h-12 rounded-2xl bg-white/90 dark:bg-zinc-900/70"
-                />
-                <Button type="submit" disabled={isStreamingChat || !chatQuery.trim()} className="h-12 rounded-2xl px-5 sm:min-w-32">
-                  {isStreamingChat ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : <Send data-icon="inline-start" />}
-                  {isStreamingChat ? 'Streaming...' : 'Send'}
+              {!showAddSource ? (
+                <Button 
+                  onClick={() => setShowAddSource(true)}
+                  className="w-full justify-start gap-3 rounded-2xl h-11 border-dashed border-2 bg-transparent hover:bg-muted/50 text-muted-foreground/60 hover:text-primary transition-all group ring-1 ring-primary/5 active:scale-95"
+                  variant="outline"
+                >
+                  <Plus className="size-4 group-hover:rotate-90 transition-transform duration-500" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Connect Source</span>
                 </Button>
-              </form>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-[1.8rem] bg-white/78 py-0 dark:bg-white/5">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-xl font-semibold">Stored documents</CardTitle>
-              <CardDescription>Saved for this group.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4 pb-6">
-              {isLoading ? (
-                <div className="flex flex-col gap-4">
-                  <Skeleton className="h-24 w-full rounded-[1.25rem]" />
-                  <Skeleton className="h-24 w-full rounded-[1.25rem]" />
-                </div>
-              ) : documents.length === 0 ? (
-                <div className="rounded-[1.6rem] border border-dashed border-zinc-300 bg-white/65 px-6 py-12 text-center dark:border-zinc-700 dark:bg-white/5">
-                  <div className="mx-auto mb-4 inline-flex size-12 items-center justify-center rounded-2xl bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
-                    <Link2 />
+              ) : (
+                <Card className="rounded-[2rem] overflow-hidden border-primary/20 shadow-2xl animate-in fade-in slide-in-from-top-4 duration-700 bg-card/60 backdrop-blur-md">
+                  <div className="p-4 border-b bg-muted/40 flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-widest leading-none">New Context</span>
+                    <Button variant="ghost" size="icon" className="size-7 rounded-full hover:bg-destructive/10 hover:text-destructive transition-colors" onClick={() => setShowAddSource(false)}>
+                      <X className="size-4" />
+                    </Button>
                   </div>
-                  <h2 className="text-xl font-semibold text-zinc-950 dark:text-zinc-50">No documents yet</h2>
-                  <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Add a source above.</p>
+                  <div className="p-5 space-y-4">
+                    <Select value={linkForm.type} onChange={(e) => setLinkForm({ ...linkForm, type: e.target.value })} className="h-11 text-[10px] rounded-xl font-black uppercase tracking-widest bg-background/50">
+                      <option value="web">Web Access</option>
+                      <option value="youtube">YouTube Ground</option>
+                      <option value="file">Local Archive</option>
+                    </Select>
+
+                    {linkForm.type === 'file' ? (
+                      <div className="space-y-4">
+                         <div 
+                           onClick={() => fileInputRef.current?.click()}
+                           className="w-full h-32 border-dashed border-2 rounded-2xl bg-muted/20 hover:bg-muted/40 cursor-pointer flex flex-col items-center justify-center gap-3 transition-all border-muted-foreground/20 hover:border-primary/40 group overflow-hidden relative"
+                         >
+                           <Upload className="size-6 text-muted-foreground/40 group-hover:text-primary group-hover:scale-110 transition-all duration-500" />
+                           <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 px-6 text-center leading-relaxed">
+                             {fileForm.file ? fileForm.file.name : 'Choose Archive\n(PDF/DOCX/TXT)'}
+                           </span>
+                           {fileForm.file && <div className="absolute inset-0 bg-primary/5 animate-pulse pointer-events-none" />}
+                         </div>
+                         <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.docx,.txt" onChange={handleFileSelection} />
+                         {fileForm.file && (
+                           <Button onClick={handleSubmitFile} disabled={isSubmittingFile} className="w-full h-12 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-2xl shadow-primary/20 bg-primary active:scale-95 transition-all">
+                             {isSubmittingFile ? <LoaderCircle className="animate-spin mr-2" /> : <Upload className="size-4 mr-2" />}
+                             Ground to System
+                           </Button>
+                         )}
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="relative group">
+                          <div className="absolute inset-0 rounded-xl ring-1 ring-primary/5 transition-all pointer-events-none" />
+                          <Input 
+                            name="sourceUrl" 
+                            placeholder="Resource URL (https://...)" 
+                            value={linkForm.sourceUrl} 
+                            onChange={handleLinkChange}
+                            className="h-12 text-xs rounded-xl bg-background/50 border-white/5 font-bold tracking-tight px-4 focus-visible:ring-0 transition-all outline-none"
+                          />
+                        </div>
+                        <div className="relative group">
+                          <div className="absolute inset-0 rounded-xl ring-1 ring-primary/5 transition-all pointer-events-none" />
+                          <Input 
+                            name="title" 
+                            placeholder="Custom Identifier (Optional)" 
+                            value={linkForm.title} 
+                            onChange={handleLinkChange}
+                            className="h-12 text-xs rounded-xl bg-background/50 border-white/5 font-bold tracking-tight px-4 focus-visible:ring-0 transition-all outline-none"
+                          />
+                        </div>
+                        <Button onClick={handleSubmitLink} disabled={isSubmittingLink} className="w-full h-12 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-2xl shadow-primary/20 bg-primary active:scale-95 transition-all">
+                          {isSubmittingLink ? <LoaderCircle className="animate-spin mr-2" /> : <Link2 className="size-4 mr-2" />}
+                          Synchronize Context
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              )}
+            </div>
+
+            <div className="space-y-3 pt-2">
+              {isLoading ? (
+                Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)
+              ) : documents.length === 0 ? (
+                <div className="text-center py-16 px-6 border-2 border-dashed rounded-[2.5rem] bg-muted/5 opacity-40 flex flex-col gap-4 animate-in fade-in duration-1000">
+                   <div className="p-4 rounded-2xl bg-muted/20 w-fit mx-auto">
+                      <FileText className="size-8 opacity-20" />
+                   </div>
+                   <div className="space-y-1">
+                      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-center">Empty Context</p>
+                      <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-widest">Grounding Required</p>
+                   </div>
+                </div>
+              ) : documents.map((doc) => (
+                <div 
+                  key={doc.id} 
+                  className="group flex items-start gap-4 p-5 rounded-[2rem] hover:bg-card/80 hover:shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-transparent hover:border-primary/10 transition-all duration-500 cursor-pointer relative overflow-hidden ring-1 ring-zinc-500/5 hover:ring-primary/20 active:scale-[0.98]"
+                >
+                  <div className="mt-0.5 p-3 rounded-2xl bg-primary/5 text-primary group-hover:scale-110 group-hover:rotate-6 transition-all duration-500 shadow-inner">
+                    {doc.type === 'youtube' ? <PlayCircle className="size-4" /> : doc.type === 'web' ? <Globe className="size-4" /> : <FileText className="size-4" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-[13px] font-bold truncate leading-none text-zinc-900 dark:text-zinc-100 group-hover:text-primary transition-colors pr-2 tracking-tight">{doc.title}</h4>
+                    <div className="flex items-center gap-2 mt-3">
+                      <Badge variant={statusBadgeVariant[doc.status]} className="text-[8px] font-black px-2 h-4 uppercase tracking-tighter rounded-sm shadow-sm">
+                        {doc.status}
+                      </Badge>
+                      <span className="text-[9px] font-black text-muted-foreground/40 uppercase tracking-[0.2em]">{formatDocumentType(doc.type)}</span>
+                    </div>
+                  </div>
+                  <div className="absolute right-0 top-0 bottom-0 w-[3px] bg-primary scale-y-0 group-hover:scale-y-100 transition-transform duration-700" />
+                  
+                  {/* Backdrop Zap icon decoration */}
+                  <div className="absolute top-1/2 right-4 -translate-y-1/2 opacity-[0.03] rotate-12 scale-150 pointer-events-none group-hover:scale-[2] group-hover:rotate-45 transition-all duration-1000">
+                    <Zap className="size-20" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <div className="p-5 border-t bg-muted/30 backdrop-blur-3xl">
+            <div className="flex items-center gap-4 group">
+              <div className="size-11 rounded-3xl bg-zinc-950 dark:bg-white flex items-center justify-center text-white dark:text-zinc-950 font-black text-sm shadow-2xl transition-transform group-hover:scale-110">
+                {group?.title?.[0]?.toUpperCase() || 'N'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-black uppercase tracking-[0.2em] truncate text-muted-foreground/60">Researcher Identity</p>
+                <p className="text-[10px] text-zinc-900 dark:text-zinc-100 font-black uppercase tracking-widest truncate pt-0.5">{group?.title} SYSTEM</p>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* Main Content: Chat */}
+        <main className="flex-1 flex flex-col relative bg-card/[0.02] overflow-hidden">
+          {/* Main Header */}
+          <header className={`h-20 border-b bg-background/60 backdrop-blur-3xl flex items-center px-8 justify-between sticky top-0 z-10 transition-all duration-700`}>
+            <div className="flex items-center gap-8">
+              {!isSidebarCollapsed && (
+                <div className="relative">
+                   <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full opacity-50" />
+                   <Bot className="size-7 text-primary relative z-10 animate-pulse" />
+                </div>
+              )}
+              {isSidebarCollapsed && <div className="w-12" />} {/* Space for trigger button */}
+              <div>
+                <h1 className="text-sm font-black uppercase tracking-[0.4em] text-zinc-900 dark:text-zinc-100 leading-none">Intelligence Core</h1>
+                <p className="text-[10px] text-muted-foreground font-black uppercase tracking-[0.2em] mt-2 opacity-30">Grounded Logic Engine</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 pr-2">
+              <div className="hidden sm:flex items-center gap-2 mr-4">
+                 <div className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                 <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500/80">Stream Active</span>
+              </div>
+              <Badge variant="outline" className="rounded-full bg-background/50 border-white/5 px-4 py-1.5 font-black text-[10px] uppercase tracking-widest shadow-sm ring-1 ring-primary/10">
+                {isStreamingChat ? (
+                  <span className="flex items-center gap-2 text-primary">
+                    <LoaderCircle className="size-3 animate-spin" /> Analyzing Source Context
+                  </span>
+                ) : 'System Active'}
+              </Badge>
+            </div>
+          </header>
+
+          {/* Chat Feed */}
+          <div 
+            ref={chatViewportRef}
+            className="flex-1 overflow-y-auto px-6 py-12 md:px-10 scroll-smooth scrollbar-none"
+          >
+            <div className="max-w-4xl mx-auto space-y-24 pb-48">
+              {chatMessages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-12 mt-32 opacity-80 animate-in fade-in zoom-in duration-1000">
+                  <div className="relative group">
+                    <div className="absolute inset-0 bg-primary/10 blur-3xl rounded-full scale-150 animate-pulse" />
+                    <div className="p-12 rounded-[4rem] bg-card/60 backdrop-blur-md border-2 border-dashed border-primary/20 shadow-inner relative z-10 transition-transform duration-700 group-hover:scale-110">
+                      <Bot className="size-24 text-primary/40 group-hover:text-primary/60 transition-colors" />
+                    </div>
+                  </div>
+                  <div className="text-center space-y-4">
+                    <h2 className="text-4xl font-black tracking-tighter uppercase text-zinc-900 dark:text-zinc-100">Establish Grounding</h2>
+                    <p className="text-sm font-bold text-muted-foreground max-w-sm mx-auto uppercase tracking-widest opacity-60 leading-relaxed">Ask questions based strictly on your synchronized source identity.</p>
+                  </div>
                 </div>
               ) : (
-                documents.map((document, index) => (
-                  <div
-                    key={document.id ?? `${document.title}-${index}`}
-                    className="flex flex-col gap-4 rounded-[1.6rem] border border-white/70 bg-white/88 p-5 dark:border-white/10 dark:bg-white/6 sm:flex-row sm:items-center sm:justify-between"
+                chatMessages.map((msg, idx) => (
+                  <div 
+                    key={msg.id || idx} 
+                    className={`flex gap-8 md:gap-12 animate-in fade-in slide-in-from-bottom-12 duration-700`}
                   >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="truncate text-lg font-semibold text-zinc-950 dark:text-zinc-50">{document.title}</h2>
-                        <Badge variant="outline">{formatDocumentType(document.type)}</Badge>
-                        <Badge variant={statusBadgeVariant[document.status] || 'secondary'}>{document.status}</Badge>
+                    <div className="flex-shrink-0 pt-1">
+                      <div className={`size-14 rounded-[1.8rem] flex items-center justify-center transition-all hover:scale-110 active:scale-95 shadow-2xl ${
+                        msg.role === 'user' 
+                        ? 'bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 shadow-zinc-500/20 ring-4 ring-zinc-500/5' 
+                        : 'bg-primary/10 text-primary border border-primary/10 shadow-primary/10 ring-4 ring-primary/5'
+                      }`}>
+                        {msg.role === 'user' ? <User className="size-6" /> : <Bot className="size-7" />}
                       </div>
-                      <p className="mt-2 truncate text-sm text-zinc-600 dark:text-zinc-300">{formatDocumentSource(document)}</p>
                     </div>
-                    <div className="text-sm text-zinc-500 dark:text-zinc-400">{document.createdAt ? new Date(document.createdAt).toLocaleDateString() : 'Saved'}</div>
+                    <div className="flex-1 space-y-5 min-w-0">
+                      <div className="flex items-center gap-6">
+                        <span className={`text-[11px] font-black uppercase tracking-[0.4em] ${msg.role === 'user' ? 'text-zinc-900 dark:text-zinc-100' : 'text-primary'}`}>
+                          {msg.role === 'user' ? 'Researcher' : 'Intelligence Agent'}
+                        </span>
+                        {msg.isStreaming && <LoaderCircle className="size-4 animate-spin text-primary opacity-60" />}
+                        <div className="h-px flex-1 bg-border/40" />
+                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 italic">Protocol v1.0</span>
+                      </div>
+                      <div className={`text-zinc-800 dark:text-zinc-100 leading-9 font-medium text-lg tracking-tight selection:bg-primary/30`}>
+                        <p className="whitespace-pre-wrap">
+                          {msg.content || (msg.isStreaming ? '...' : '')}
+                        </p>
+                      </div>
+                      {msg.role === 'assistant' && !msg.isStreaming && (
+                         <div className="pt-6 flex flex-wrap items-center gap-3">
+                            <Button variant="ghost" size="sm" className="h-9 rounded-2xl px-5 text-[10px] font-black uppercase tracking-widest bg-muted/20 hover:bg-primary/10 hover:text-primary transition-all active:scale-95 border border-white/5">
+                               <ShieldCheck className="size-3.5 mr-2 opacity-60" />
+                               Cite Protocol
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-9 rounded-2xl px-5 text-[10px] font-black uppercase tracking-widest bg-muted/20 hover:bg-primary/10 hover:text-primary transition-all active:scale-95 border border-white/5">
+                               <Zap className="size-3.5 mr-2 opacity-60" />
+                               Verify Logic
+                            </Button>
+                         </div>
+                      )}
+                    </div>
                   </div>
                 ))
               )}
 
-              <Separator />
+              {chatError && (
+                <div className="p-8 rounded-[2.5rem] bg-destructive/10 border-2 border-destructive/20 text-destructive text-sm font-black flex items-center gap-6 animate-in shake-in shadow-2xl shadow-destructive/10 relative overflow-hidden">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgba(var(--destructive),0.05),transparent)]" />
+                  <div className="p-4 rounded-2xl bg-destructive/20 relative z-10">
+                     <AlertTriangle className="size-7" />
+                  </div>
+                  <div className="space-y-1 relative z-10">
+                    <p className="uppercase tracking-[0.3em] font-black text-xs mb-1">Transmission Failure</p>
+                    <p className="opacity-80 tracking-tight">{chatError}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
 
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                This list now comes from the backend and stays visible after reload.
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+          {/* Floating Chat Input */}
+          <div className="absolute bottom-0 left-0 right-0 p-10 bg-gradient-to-t from-background via-background/95 to-transparent pointer-events-none">
+            <div className={`max-w-4xl mx-auto pointer-events-auto transition-all duration-1000 delay-300 animate-in slide-in-from-bottom-16`}>
+              <form 
+                onSubmit={handleSubmitChat}
+                className="relative flex items-end gap-5 p-5 rounded-[3rem] bg-white/90 dark:bg-zinc-900/90 border border-white/10 shadow-[0_40px_100px_rgba(0,0,0,0.3)] dark:shadow-[0_40px_100px_rgba(0,0,0,0.6)] backdrop-blur-3xl group transition-all duration-700 overflow-hidden"
+              >
+                <div className="flex-1 relative pb-1">
+                  <textarea
+                    rows={1}
+                    value={chatQuery}
+                    onChange={(e) => setChatQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSubmitChat(e);
+                      }
+                    }}
+                    placeholder="Engage with grounded research context..."
+                    className="w-full bg-transparent border-none focus:ring-0 placeholder:text-muted-foreground/30 px-6 pt-5 pb-3 resize-none h-[64px] max-h-56 text-lg font-bold tracking-tight leading-relaxed selection:bg-primary/20"
+                    disabled={isStreamingChat}
+                  />
+                </div>
+                <Button 
+                  type="submit" 
+                  size="icon" 
+                  disabled={isStreamingChat || !chatQuery.trim()}
+                  className="size-16 rounded-[2rem] shadow-2xl shadow-primary/30 transition-all hover:scale-110 active:scale-90 bg-primary hover:bg-primary/90 flex-shrink-0 ring-4 ring-primary/10 mb-1"
+                >
+                  {isStreamingChat ? <LoaderCircle className="size-7 animate-spin" /> : <Send className="size-6" />}
+                </Button>
+                
+                {/* Status Indicator inside input */}
+                <div className="absolute top-0 right-0 p-4 opacity-0 group-focus-within:opacity-100 transition-opacity">
+                   <div className="flex items-center gap-2">
+                       <span className="text-[9px] font-black uppercase tracking-widest text-primary/60">Grounded Mode</span>
+                       <div className="size-1.5 rounded-full bg-primary animate-pulse" />
+                   </div>
+                </div>
+
+                {/* Visual Accent */}
+                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-primary/30 to-transparent opacity-0 group-focus-within:opacity-100 transition-opacity" />
+              </form>
+              <div className="flex justify-center flex-wrap gap-x-10 gap-y-2 mt-6">
+                 <div className="flex items-center gap-3 opacity-20">
+                    <ShieldCheck className="size-3 text-primary" />
+                    <p className="text-[9px] text-muted-foreground font-black uppercase tracking-[0.4em]">
+                      AI Integrity Guard
+                    </p>
+                 </div>
+                 <div className="h-px w-10 bg-muted-foreground/10 self-center hidden sm:block" />
+                 <div className="flex items-center gap-3 opacity-20">
+                    <Zap className="size-3 text-primary" />
+                    <p className="text-[9px] text-muted-foreground font-black uppercase tracking-[0.4em]">
+                      Grounded Synchronicity
+                    </p>
+                 </div>
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
     </AuthGuard>
   );
 }
+
+// Fixed missing ShieldCheck import
+import { ShieldCheck as ShieldCheckIcon } from 'lucide-react';
+const ShieldCheck = ShieldCheckIcon;

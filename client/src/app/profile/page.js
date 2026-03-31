@@ -12,8 +12,9 @@ import { Separator } from '@/components/ui/separator';
 import { useRouter } from 'next/navigation';
 import AuthGuard from '@/components/AuthGuard';
 import { apiRequest } from '@/lib/api';
+import Link from 'next/link';
 
-import { ArrowLeft, KeyRound, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, KeyRound, LogOut, ShieldCheck, Zap } from 'lucide-react';
 
 export default function ProfilePage() {
   const [apiKey, setApiKey] = useState('');
@@ -53,103 +54,121 @@ export default function ProfilePage() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(14,165,233,0.14),transparent_28%),linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)] px-4 py-12 dark:bg-[radial-gradient(circle_at_top,rgba(34,197,94,0.12),transparent_28%),linear-gradient(180deg,#09090b_0%,#111827_100%)] selection:bg-zinc-200 dark:selection:bg-zinc-800">
-        <div className="mx-auto max-w-5xl space-y-8">
-          <div className="flex flex-col gap-4 rounded-[2rem] border border-white/70 bg-white/80 px-6 py-6 shadow-[0_24px_70px_rgba(15,23,42,0.08)] backdrop-blur dark:border-white/10 dark:bg-white/5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="mb-3">
-                <Badge variant="outline" className="rounded-full px-3 py-1 uppercase tracking-[0.2em]">Account Center</Badge>
-              </div>
-              <h1 className="text-3xl font-semibold tracking-[-0.04em] text-zinc-900 dark:text-zinc-50">Profile Settings</h1>
-              <p className="mt-1 text-zinc-500 dark:text-zinc-400">Manage your identity and NotebookLM integrations.</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <SignOutButton>
-                <Button variant="ghost" className="cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-full px-6">
-                  Sign Out
-                </Button>
-              </SignOutButton>
-              <Button variant="outline" onClick={() => router.push('/')} className="cursor-pointer shadow-sm rounded-full px-6">
-                <ArrowLeft className="h-4 w-4" />
-                Back to Dashboard
-              </Button>
-            </div>
+      <div className="flex-1 flex flex-col pt-8 pb-12 px-4 sm:px-8 max-w-5xl mx-auto w-full gap-10 animate-in fade-in duration-700 bg-[radial-gradient(circle_at_50%_0%,rgba(63,63,70,0.03),transparent_40%)]">
+        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+           <div className="flex items-center gap-4">
+             <Button variant="ghost" size="icon" className="rounded-full bg-muted/20 hover:bg-muted/40 transition-all active:scale-90" asChild>
+                <Link href="/"><ArrowLeft className="size-4" /></Link>
+             </Button>
+             <div className="flex flex-col">
+               <div className="flex items-center gap-2 text-[10px] font-black tracking-[0.2em] uppercase text-muted-foreground/40 mb-1">
+                  <span>Intelligence</span>
+                  <span className="opacity-40">/</span>
+                  <span className="text-primary/60">Settings</span>
+               </div>
+               <h1 className="text-4xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">Identity Center</h1>
+             </div>
           </div>
+          <SignOutButton>
+             <Button variant="destructive" className="rounded-full px-8 font-black uppercase tracking-widest text-[10px] shadow-2xl shadow-destructive/20 h-11 active:scale-95 transition-all">
+                <LogOut className="size-4 mr-2" />
+                Terminate Session
+             </Button>
+          </SignOutButton>
+        </header>
 
-          <div className="flex flex-col gap-10">
-            <Card className="shadow-sm border-zinc-200 dark:border-zinc-800/60 bg-white dark:bg-zinc-950/50 backdrop-blur-sm overflow-hidden rounded-2xl">
-              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-emerald-500" />
-              <CardHeader className="pb-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600 dark:text-blue-400">
-                    <KeyRound className="w-5 h-5" />
-                  </div>
-                  <CardTitle className="text-xl">Gemini Configuration</CardTitle>
-                </div>
-                <CardDescription className="text-base pt-1">
-                  Overwrite the API key used for your intelligent NotebookLM interactions.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleUpdateKey} className="space-y-5 max-w-xl">
-                  <div className="space-y-3">
-                    <Label htmlFor="apiKey" className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-                      New API Key
-                    </Label>
-                    <Input
-                      id="apiKey"
-                      type="password"
-                      placeholder="Enter new API key to overwrite..."
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      className="font-mono bg-zinc-50 dark:bg-zinc-900/50 rounded-xl"
-                    />
-                    <div className="flex items-start gap-2 text-xs text-zinc-500 mt-2">
-                      <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-                      <p>
-                        Need a new key? Visit{' '}
-                        <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
-                          Google AI Studio
-                        </a> to generate one securely.
-                      </p>
+        <div className="grid grid-cols-1 gap-10">
+           {/* Gemini Configuration */}
+           <Card className="rounded-[3rem] bg-card/60 backdrop-blur-md border-white/10 overflow-hidden relative ring-1 ring-zinc-500/5 shadow-sm">
+              <div className="absolute top-0 right-0 p-10 opacity-[0.03] -rotate-12 translate-x-4 -translate-y-4 pointer-events-none">
+                 <KeyRound className="size-48" />
+              </div>
+              <CardHeader className="p-8 pb-4">
+                 <div className="flex items-center gap-4 mb-3">
+                    <div className="p-4 bg-primary/10 text-primary rounded-[1.2rem] shadow-inner">
+                       <Zap className="size-6" />
                     </div>
-                  </div>
+                    <div className="space-y-1">
+                       <CardTitle className="text-2xl font-black tracking-tight">Gemini Gateway</CardTitle>
+                       <CardDescription className="text-xs font-bold text-muted-foreground/60 uppercase tracking-widest leading-none pt-1">
+                          Protocol Configuration
+                       </CardDescription>
+                    </div>
+                 </div>
+              </CardHeader>
+              <CardContent className="p-8 pt-4">
+                 <form onSubmit={handleUpdateKey} className="space-y-8 max-w-xl">
+                    <div className="space-y-4">
+                       <Label htmlFor="apiKey" className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/40 ml-1">New Gateway Key</Label>
+                       <div className="relative group">
+                          <div className="absolute inset-0 rounded-2xl ring-1 ring-primary/5 transition-all pointer-events-none shadow-sm" />
+                          <Input
+                             id="apiKey"
+                             type="password"
+                             placeholder="Overwrite active mission key..."
+                             value={apiKey}
+                             onChange={(e) => setApiKey(e.target.value)}
+                             className="h-14 rounded-2xl bg-background/50 border-white/5 font-mono text-sm px-6 focus-visible:ring-0 focus-visible:shadow-[0_0_20px_rgba(var(--primary),0.05)] transition-all outline-none"
+                          />
+                       </div>
+                       <div className="flex items-start gap-2 text-[10px] text-muted-foreground/60 font-medium px-1">
+                          <ShieldCheck className="size-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                          <p>
+                             Protocol updates are encrypted instantly. Visit
+                             <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-primary font-black hover:underline mx-1 uppercase tracking-widest text-[9px]">
+                                Google Studio
+                             </a> 
+                             to verify key integrity.
+                          </p>
+                       </div>
+                    </div>
 
-                  <Separator />
+                    {error && (
+                      <Alert variant="destructive" className="rounded-[1.5rem] bg-destructive/10 border-destructive/20 animate-in shake-in">
+                         <AlertTitle className="text-[10px] font-black uppercase tracking-widest mb-1">Update Synchronicity Failed</AlertTitle>
+                         <AlertDescription className="text-xs font-bold opacity-80">{error}</AlertDescription>
+                      </Alert>
+                    )}
+                    {message && (
+                      <Alert className="rounded-[1.5rem] border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                         <ShieldCheck className="size-4" />
+                         <AlertTitle className="text-[10px] font-black uppercase tracking-widest mb-1">Configuration Synced</AlertTitle>
+                         <AlertDescription className="text-xs font-bold opacity-80">{message}</AlertDescription>
+                      </Alert>
+                    )}
 
-                  {error && (
-                    <Alert variant="destructive">
-                      <AlertTitle>Unable to update key</AlertTitle>
-                      <AlertDescription>{error}</AlertDescription>
-                    </Alert>
-                  )}
-                  {message && (
-                    <Alert className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-300">
-                      <ShieldCheck className="h-4 w-4" />
-                      <AlertTitle>Saved</AlertTitle>
-                      <AlertDescription>{message}</AlertDescription>
-                    </Alert>
-                  )}
-
-                  <Button type="submit" disabled={isLoading} className="cursor-pointer rounded-full px-8 shadow-sm">
-                    {isLoading ? 'Updating Securely...' : 'Update API Key'}
-                  </Button>
-                </form>
+                    <Button type="submit" disabled={isLoading} className="rounded-full h-14 px-10 font-black uppercase tracking-widest text-xs shadow-2xl shadow-primary/20 transition-all hover:scale-105 active:scale-95 bg-primary ring-4 ring-primary/10">
+                       {isLoading ? 'Encrypting...' : 'Update Mission Access'}
+                    </Button>
+                 </form>
               </CardContent>
-            </Card>
+           </Card>
 
-            <div className="w-full shadow-sm rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800/60 bg-white dark:bg-zinc-950/50">
+           {/* User Profile */}
+           <div className="rounded-[3rem] border border-white/10 bg-card/60 backdrop-blur-md overflow-hidden shadow-sm relative ring-1 ring-zinc-500/5">
+              <div className="p-8 border-b bg-muted/20">
+                 <h2 className="text-[10px] font-black uppercase tracking-[0.4em] text-muted-foreground/40">Researcher Identity Protocol</h2>
+              </div>
               <UserProfile 
                 routing="hash" 
                 appearance={{ 
                   elements: { 
                     rootBox: "w-full shadow-none",
-                    card: "shadow-none sm:rounded-none",
+                    card: "shadow-none sm:rounded-none w-full bg-transparent p-0",
+                    navbar: "hidden",
+                    scrollBox: "p-4 sm:p-8",
+                    cardBox: "shadow-none border-none bg-transparent"
                   } 
                 }} 
               />
-            </div>
-          </div>
+           </div>
+        </div>
+        
+        <div className="text-center opacity-30 pb-4 flex flex-col items-center gap-2">
+           <p className="text-[9px] text-muted-foreground font-black uppercase tracking-[0.5em] italic">
+              AI Notebook Intelligence v1.02.4
+           </p>
+           <div className="h-px w-32 bg-muted-foreground/30" />
         </div>
       </div>
     </AuthGuard>

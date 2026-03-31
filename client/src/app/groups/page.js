@@ -3,15 +3,22 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
-import { AlertTriangle, ArrowLeft, FolderKanban, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { 
+  ArrowLeft, 
+  FolderKanban, 
+  LoaderCircle,
+  Plus, 
+  Search, 
+  Sparkles, 
+  Trash2, 
+  Zap 
+} from 'lucide-react';
 
 import AuthGuard from '@/components/AuthGuard';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiRequest } from '@/lib/api';
 
@@ -19,218 +26,160 @@ export default function GroupsPage() {
   const { getToken } = useAuth();
   const [groups, setGroups] = useState([]);
   const [title, setTitle] = useState('');
-  const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
-  const [deletingGroupId, setDeletingGroupId] = useState('');
+  const [deletingId, setDeletingId] = useState('');
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     const loadGroups = async () => {
       try {
-        setError('');
         const token = await getToken();
         const response = await apiRequest('/groups', { token });
         setGroups(response.data ?? []);
       } catch (err) {
-        setError(err.message);
+        console.error(err);
       } finally {
         setIsLoading(false);
       }
     };
-
     loadGroups();
   }, [getToken]);
 
-  const handleCreateGroup = async (event) => {
-    event.preventDefault();
-
-    if (!title.trim()) {
-      setError('Group title is required');
-      return;
-    }
-
+  const handleCreateGroup = async (e) => {
+    e.preventDefault();
+    if (!title.trim()) return;
     try {
       setIsCreating(true);
-      setError('');
-      setMessage('');
       const token = await getToken();
       const response = await apiRequest('/groups', {
         method: 'POST',
         token,
         body: JSON.stringify({ title }),
       });
-
-      setGroups((currentGroups) => [response.data, ...currentGroups]);
+      setGroups([response.data, ...groups]);
       setTitle('');
-      setMessage(response.message || 'Group created successfully');
     } catch (err) {
-      setError(err.message);
+      console.error(err);
     } finally {
       setIsCreating(false);
     }
   };
 
-  const handleDeleteGroup = async (groupId) => {
+  const handleDeleteGroup = async (id) => {
     try {
-      setDeletingGroupId(groupId);
-      setError('');
-      setMessage('');
+      setDeletingId(id);
       const token = await getToken();
-      const response = await apiRequest(`/groups/${groupId}`, {
-        method: 'DELETE',
-        token,
-      });
-
-      setGroups((currentGroups) => currentGroups.filter((group) => group.id !== groupId));
-      setMessage(response.message || 'Group deleted successfully');
+      await apiRequest(`/groups/${id}`, { method: 'DELETE', token });
+      setGroups(groups.filter(g => g.id !== id));
     } catch (err) {
-      setError(err.message);
+      console.error(err);
     } finally {
-      setDeletingGroupId('');
+      setDeletingId('');
     }
   };
 
+  const filteredGroups = groups.filter(g => g.title.toLowerCase().includes(search.toLowerCase()));
+
   return (
     <AuthGuard>
-      <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-          <section className="overflow-hidden rounded-[2rem] border border-white/70 bg-white/78 shadow-[0_30px_80px_rgba(15,23,42,0.08)] backdrop-blur dark:border-white/10 dark:bg-white/5">
-            <div className="grid gap-6 px-6 py-7 lg:grid-cols-[1.15fr_0.85fr] lg:px-8 lg:py-8">
-              <div className="flex flex-col gap-5">
-                <Badge variant="outline" className="w-fit rounded-full px-3 py-1 uppercase tracking-[0.24em]">
-                  <FolderKanban className="size-3.5" />
-                  Workspaces
-                </Badge>
-                <div className="flex flex-col gap-2">
-                  <h1 className="text-4xl font-semibold tracking-[-0.05em] text-zinc-950 dark:text-zinc-50 sm:text-5xl">
-                    Clean group spaces for every topic.
-                  </h1>
-                  <p className="max-w-xl text-sm text-zinc-600 dark:text-zinc-300">
-                    Create, open, upload.
-                  </p>
+      <div className="flex-1 flex flex-col pt-6 pb-12 px-4 sm:px-8 max-w-7xl mx-auto w-full gap-8 animate-in fade-in duration-1000 bg-[radial-gradient(circle_at_50%_0%,rgba(63,63,70,0.03),transparent_40%)]">
+        <header className="flex flex-col gap-6">
+          <div className="flex items-center gap-4">
+             <Button variant="ghost" size="icon" className="rounded-full bg-muted/20 hover:bg-muted/40 transition-all active:scale-90" asChild>
+                <Link href="/"><ArrowLeft className="size-4" /></Link>
+             </Button>
+             <div className="flex flex-col">
+               <div className="flex items-center gap-2 text-[10px] font-black tracking-[0.2em] uppercase text-muted-foreground/40 mb-1">
+                  <span className="hover:text-primary transition-colors cursor-pointer">Intelligence</span>
+                  <span className="opacity-40">/</span>
+                  <span className="text-primary/60">Workspaces</span>
+               </div>
+               <h1 className="text-4xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">Workspaces</h1>
+             </div>
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-700">
+             <div className="relative flex-1 min-w-[280px] group">
+                <div className="absolute inset-0 rounded-full ring-1 ring-primary/5 transition-all pointer-events-none shadow-sm" />
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                <Input 
+                   placeholder="Search notebooks..." 
+                   className="pl-11 h-12 rounded-full bg-background/50 backdrop-blur-sm border-white/5 focus-visible:ring-0 focus-visible:shadow-[0_0_20px_rgba(var(--primary),0.05)] transition-all font-bold tracking-tight text-sm outline-none" 
+                   value={search}
+                   onChange={(e) => setSearch(e.target.value)}
+                />
+             </div>
+             
+             <form onSubmit={handleCreateGroup} className="flex items-center gap-3 group">
+                <div className="relative group">
+                  <div className="absolute inset-0 rounded-full ring-1 ring-primary/10 transition-all pointer-events-none shadow-sm" />
+                  <Input 
+                    placeholder="New workspace title" 
+                    className="h-12 rounded-full bg-background/50 backdrop-blur-sm border-white/5 focus-visible:ring-0 w-56 sm:w-72 font-bold tracking-tight text-sm px-6 outline-none"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                  />
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button asChild variant="outline" className="h-11 rounded-full px-5">
-                    <Link href="/">
-                      <ArrowLeft data-icon="inline-start" />
-                      Dashboard
-                    </Link>
-                  </Button>
-                  <Badge variant="secondary" className="h-11 rounded-full px-4 text-sm">
-                    {groups.length} active groups
-                  </Badge>
-                </div>
-              </div>
+                <Button type="submit" size="icon" className="h-12 w-12 rounded-full shadow-2xl shadow-primary/20 hover:scale-110 active:scale-90 transition-all bg-primary ring-4 ring-primary/10" disabled={isCreating}>
+                  {isCreating ? <LoaderCircle className="animate-spin" /> : <Plus className="size-5" />}
+                </Button>
+             </form>
+          </div>
+        </header>
 
-              <Card className="rounded-[1.8rem] bg-white/72 py-0 dark:bg-white/6">
-                <CardHeader className="pb-3">
-                  <div className="mb-2 inline-flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                    <Sparkles />
-                  </div>
-                  <CardTitle className="text-xl font-semibold">New group</CardTitle>
-                  <CardDescription>Short name. Fast start.</CardDescription>
-                </CardHeader>
-                <CardContent className="pb-6">
-                  <form onSubmit={handleCreateGroup} className="flex flex-col gap-3">
-                    <Input
-                      value={title}
-                      onChange={(event) => setTitle(event.target.value)}
-                      placeholder="e.g. ML Research"
-                      className="h-12 rounded-2xl bg-white/90 dark:bg-zinc-900/70"
-                    />
-                    <Button type="submit" disabled={isCreating} className="h-12 rounded-2xl text-sm font-medium">
-                      <Plus data-icon="inline-start" />
-                      {isCreating ? 'Creating...' : 'Create group'}
-                    </Button>
-                  </form>
-                  <Separator className="my-4" />
-                  <div className="flex items-center justify-between text-sm text-zinc-600 dark:text-zinc-300">
-                    <span>Ready for uploads</span>
-                    <Badge variant="success">Live</Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </section>
-
-          {error && (
-            <Alert variant="destructive" className="rounded-[1.5rem] border-red-200 bg-red-50 shadow-sm dark:border-red-900/30 dark:bg-red-950/20">
-              <AlertTriangle />
-              <AlertTitle>Group action failed</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {message && (
-            <Alert className="rounded-[1.5rem] border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-300">
-              <AlertTitle>Updated</AlertTitle>
-              <AlertDescription>{message}</AlertDescription>
-            </Alert>
-          )}
-
-          <Card className="rounded-[1.8rem] bg-white/78 py-0 dark:bg-white/5">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex flex-col gap-1">
-                  <CardTitle className="text-2xl font-semibold">All groups</CardTitle>
-                  <CardDescription>Open a workspace and start adding sources.</CardDescription>
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+           {isLoading ? (
+             Array(6).fill(0).map((_, i) => <Skeleton key={i} className="h-52 rounded-[3rem]" />)
+           ) : filteredGroups.length === 0 ? (
+             <div className="col-span-full py-32 flex flex-col items-center justify-center gap-8 bg-muted/5 border-2 border-dashed border-zinc-500/10 rounded-[3rem] opacity-60">
+                <div className="p-8 rounded-[2rem] bg-background shadow-[0_20px_50px_rgba(0,0,0,0.05)] ring-1 ring-zinc-500/5">
+                  <FolderKanban className="size-16 text-muted-foreground/30" />
                 </div>
-                <Badge variant="outline" className="rounded-full px-3 py-1">
-                  {groups.length}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4 pb-6">
-              {isLoading ? (
-                <div className="flex flex-col gap-4 rounded-[1.5rem] border border-dashed border-zinc-300 bg-zinc-50/60 p-5 dark:border-zinc-700 dark:bg-white/5">
-                  <Skeleton className="h-6 w-40" />
-                  <Skeleton className="h-24 w-full rounded-[1.25rem]" />
-                  <Skeleton className="h-24 w-full rounded-[1.25rem]" />
+                <div className="text-center space-y-2">
+                   <h2 className="text-2xl font-black uppercase tracking-tight">System Empty</h2>
+                   <p className="text-sm font-medium text-muted-foreground">Add a workspace to initiate research grounded intelligence.</p>
                 </div>
-              ) : groups.length === 0 ? (
-                <div className="rounded-[1.6rem] border border-dashed border-zinc-300 bg-white/65 px-6 py-14 text-center dark:border-zinc-700 dark:bg-white/5">
-                  <div className="mx-auto mb-4 inline-flex size-12 items-center justify-center rounded-2xl bg-zinc-950 text-white dark:bg-white dark:text-zinc-950">
-                    <FolderKanban />
+             </div>
+           ) : (
+             filteredGroups.map((g) => (
+               <Card key={g.id} className="rounded-[3rem] group hover:shadow-[0_40px_80px_rgba(0,0,0,0.1)] transition-all duration-700 hover:-translate-y-2 bg-card/60 backdrop-blur-md border-white/10 overflow-hidden relative shadow-sm ring-1 ring-zinc-500/5 hover:ring-primary/20">
+                  <Link href={`/group/${g.id}`} className="block">
+                    <CardHeader className="p-8 pb-4">
+                       <div className="flex items-center justify-between mb-4">
+                          <div className="p-4 rounded-[1.2rem] bg-primary/10 text-primary shadow-inner transition-transform group-hover:scale-110">
+                             <FolderKanban className="size-6" />
+                          </div>
+                          <Badge variant="outline" className="rounded-full bg-background/80 border-white/20 text-[10px] font-black px-3 py-1 uppercase tracking-widest text-muted-foreground/60">
+                             Notebook
+                          </Badge>
+                       </div>
+                       <CardTitle className="text-2xl font-black tracking-tighter group-hover:text-primary transition-colors mb-1">{g.title}</CardTitle>
+                       <CardDescription className="text-[10px] font-mono uppercase tracking-[0.2em] opacity-40 group-hover:opacity-60 transition-opacity">{g.id}</CardDescription>
+                    </CardHeader>
+                  </Link>
+                  <CardContent className="px-8 pb-8 pt-0 mt-6 flex justify-between items-center bg-gradient-to-t from-muted/20 to-transparent">
+                     <span className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-[0.3em] italic">
+                       Ground Ready
+                     </span>
+                     <Button 
+                       variant="ghost" 
+                       size="icon" 
+                       className="size-11 rounded-2xl text-zinc-300 hover:text-destructive hover:bg-destructive/10 transition-all active:scale-90"
+                       disabled={deletingId === g.id}
+                       onClick={() => handleDeleteGroup(g.id)}
+                     >
+                       <Trash2 className="size-4" />
+                     </Button>
+                  </CardContent>
+                  {/* Decorative background element */}
+                  <div className="absolute -bottom-10 -right-10 p-16 opacity-[0.02] pointer-events-none rotate-12 transition-transform duration-1000 group-hover:rotate-45 group-hover:scale-125">
+                    <Zap className="size-48" />
                   </div>
-                  <h2 className="text-xl font-semibold text-zinc-950 dark:text-zinc-50">No groups yet</h2>
-                  <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Create one to begin.</p>
-                </div>
-              ) : (
-                groups.map((group) => (
-                  <div
-                    key={group.id}
-                    className="flex flex-col gap-4 rounded-[1.6rem] border border-white/70 bg-white/88 p-5 transition hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-[0_24px_60px_rgba(59,130,246,0.12)] dark:border-white/10 dark:bg-white/6 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <Link href={`/group/${group.id}`} className="min-w-0 flex-1">
-                      <div className="flex items-center gap-4">
-                        <div className="inline-flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                          <FolderKanban />
-                        </div>
-                        <div className="min-w-0">
-                          <h2 className="truncate text-2xl font-semibold tracking-[-0.03em] text-zinc-950 dark:text-zinc-50">
-                            {group.title}
-                          </h2>
-                          <p className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">{group.id}</p>
-                        </div>
-                      </div>
-                    </Link>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      disabled={deletingGroupId === group.id}
-                      onClick={() => handleDeleteGroup(group.id)}
-                      className="h-11 rounded-full px-5"
-                    >
-                      <Trash2 data-icon="inline-start" />
-                      {deletingGroupId === group.id ? 'Deleting...' : 'Delete'}
-                    </Button>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        </div>
+               </Card>
+             ))
+           )}
+        </section>
       </div>
     </AuthGuard>
   );
