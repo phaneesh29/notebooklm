@@ -2,7 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 import env from '../config/env.js';
 import { getUserGeminiApiKey } from '../services/user.service.js';
 
-const GEMINI_EMBEDDING_MODEL = 'gemini-embedding-001';
+const GEMINI_EMBEDDING_MODEL = env.geminiEmbeddingModel;
 
 const clients = new Map();
 

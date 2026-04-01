@@ -11,7 +11,7 @@ import {
   FileText, 
   Globe, 
   Link2, 
-  LoaderCircle, 
+  Loader2, 
   PanelLeft, 
   PanelLeftOpen,
   PlayCircle, 
@@ -20,20 +20,24 @@ import {
   Upload, 
   User, 
   X,
-  Zap
+  Zap,
+  ShieldCheck
 } from 'lucide-react';
 
 import AuthGuard from '@/components/AuthGuard';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { apiRequest, API_BASE_URL } from '@/lib/api';
+
+import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+
 
 const statusBadgeVariant = {
   queued: 'warning',
@@ -51,17 +55,163 @@ function formatDocumentType(type) {
   return type;
 }
 
-function parseSseChunk(chunk) {
-  const event = { type: 'message', data: '' };
-  chunk.split('\n').forEach((line) => {
-    if (line.startsWith('event:')) {
-      event.type = line.slice(6).trim();
-    } else if (line.startsWith('data:')) {
-      const value = line.slice(5).trim();
-      event.data = event.data ? `${event.data}\n${value}` : value;
+function formatCitations(text) {
+  if (!text) return text;
+  
+  const citationRegex = /\[(?:Document:\s*)?([^\]]+)\]/g;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = citationRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.substring(lastIndex, match.index));
     }
-  });
-  return event;
+    
+    // We try to grab numbers or clean titles
+    let citation = match[1].trim();
+    if (citation.length > 30) citation = citation.substring(0, 27) + '...';
+
+    parts.push(
+      <sup 
+        key={`cite-${match.index}`} 
+        className="inline-flex cursor-pointer items-center justify-center bg-primary/10 text-primary border border-primary/20 hover:bg-primary hover:text-primary-foreground transition-all font-sans px-1 rounded-sm mx-0.5 tracking-tight shadow-sm" 
+        style={{ fontSize: '0.65rem', padding: '0.1em 0.3em', transform: 'translateY(-0.5em)' }}
+        title={`Source Reference: ${citation}`}
+      >
+        {citation}
+      </sup>
+    );
+    lastIndex = citationRegex.lastIndex;
+  }
+  
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex));
+  }
+  
+  return parts.length > 0 ? parts : text;
+}
+
+function getMessageText(message) {
+  if (typeof message?.content === 'string') {
+    return message.content;
+  }
+
+  if (Array.isArray(message?.content)) {
+    return message.content
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (typeof item?.text === 'string') return item.text;
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+  }
+
+  if (Array.isArray(message?.parts)) {
+    const textParts = message.parts
+      .map((part) => {
+        if (typeof part?.text === 'string') {
+          return part.text;
+        }
+
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+
+    if (textParts) {
+      return textParts;
+    }
+
+    const hasToolOnlyParts = message.parts.some((part) =>
+      typeof part?.type === 'string' && part.type.includes('tool')
+    );
+
+    if (hasToolOnlyParts) {
+      return '';
+    }
+  }
+
+  return '';
+}
+
+function normalizeCitationLabel(value) {
+  const label = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!label) return '';
+  return label.length > 80 ? `${label.slice(0, 77)}...` : label;
+}
+
+function collectSnippetTitles(value, acc) {
+  if (!value) return;
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectSnippetTitles(item, acc));
+    return;
+  }
+
+  if (typeof value === 'object') {
+    if (typeof value.title === 'string') {
+      const label = normalizeCitationLabel(value.title);
+      if (label) acc.push(label);
+    }
+
+    if (Array.isArray(value.snippets)) {
+      value.snippets.forEach((snippet) => {
+        if (typeof snippet?.title === 'string') {
+          const label = normalizeCitationLabel(snippet.title);
+          if (label) acc.push(label);
+        }
+      });
+    }
+
+    Object.values(value).forEach((nested) => collectSnippetTitles(nested, acc));
+  }
+}
+
+function getMessageCitations(message, messageText) {
+  const citations = [];
+
+  if (Array.isArray(message?.citations)) {
+    message.citations.forEach((citation) => {
+      const label = normalizeCitationLabel(citation);
+      if (label) citations.push(label);
+    });
+  }
+
+  if (Array.isArray(message?.metadata?.citations)) {
+    message.metadata.citations.forEach((citation) => {
+      const label = normalizeCitationLabel(citation);
+      if (label) citations.push(label);
+    });
+  }
+
+  // Extract titles from AI SDK tool parts when available.
+  if (Array.isArray(message?.parts)) {
+    message.parts.forEach((part) => {
+      if (!part || typeof part !== 'object') return;
+
+      const isToolPart = typeof part.type === 'string' && part.type.includes('tool');
+      if (!isToolPart) return;
+
+      collectSnippetTitles(part, citations);
+    });
+  }
+
+  // Fallback to explicit inline citations in generated text, e.g. [Document: Resume.pdf].
+  if (typeof messageText === 'string' && messageText.length > 0) {
+    const citationRegex = /\[(?:Document:\s*)?([^\]]+)\]/g;
+    let match;
+
+    while ((match = citationRegex.exec(messageText)) !== null) {
+      const label = normalizeCitationLabel(match[1]);
+      if (label) citations.push(label);
+    }
+  }
+
+  return [...new Set(citations)].slice(0, 6);
 }
 
 export default function GroupDetailPage() {
@@ -73,18 +223,41 @@ export default function GroupDetailPage() {
 
   const [group, setGroup] = useState(null);
   const [documents, setDocuments] = useState([]);
-  const [chatMessages, setChatMessages] = useState([]);
-  const [chatQuery, setChatQuery] = useState('');
-  const [chatError, setChatError] = useState('');
   const [pageError, setPageError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [isStreamingChat, setIsStreamingChat] = useState(false);
   const [isSubmittingLink, setIsSubmittingLink] = useState(false);
   const [isSubmittingFile, setIsSubmittingFile] = useState(false);
   const [showAddSource, setShowAddSource] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [linkForm, setLinkForm] = useState({ title: '', sourceUrl: '', type: 'web' });
   const [fileForm, setFileForm] = useState({ title: '', file: null });
+  const [chatInput, setChatInput] = useState('');
+
+  const { 
+    messages: chatMessages, 
+    sendMessage,
+    status: chatStatus,
+    setMessages: setChatMessages, 
+    error: chatErrorObj 
+  } = useChat({
+    transport: new DefaultChatTransport({
+      api: `${API_BASE_URL}/groups/${groupId}/chat/stream`,
+      fetch: async (url, options = {}) => {
+        const token = await getToken();
+
+        return fetch(url, {
+          ...options,
+          headers: {
+            ...(options.headers ?? {}),
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+      },
+    }),
+  });
+
+  const isStreamingChat = chatStatus === 'submitted' || chatStatus === 'streaming';
+  const chatError = chatErrorObj ? chatErrorObj.message : '';
 
   const loadDocuments = async (token) => {
     const response = await apiRequest(`/groups/${groupId}/documents`, { token });
@@ -113,6 +286,7 @@ export default function GroupDetailPage() {
 
         setGroup(matchedGroup);
         setDocuments(documentsResponse.data ?? []);
+        // Seed Vercel AI SDK chat state directly from standard Postgres Array
         setChatMessages(chatsResponse.messages ?? []);
       } catch (error) {
         setPageError(error.message);
@@ -122,7 +296,7 @@ export default function GroupDetailPage() {
     };
 
     loadGroupPage();
-  }, [getToken, groupId]);
+  }, [getToken, groupId, setChatMessages]);
 
   useEffect(() => {
     if (!groupId || isLoading) return undefined;
@@ -193,412 +367,380 @@ export default function GroupDetailPage() {
   };
 
   const handleSubmitChat = async (e) => {
-    e.preventDefault();
-    const trimmedQuery = chatQuery.trim();
-    if (!trimmedQuery || isStreamingChat) return;
-
-    const userMessageId = `user-${Date.now()}`;
-    const assistantMessageId = `assistant-${Date.now() + 1}`;
-
-    setChatQuery('');
-    setChatError('');
-    setIsStreamingChat(true);
-    setChatMessages((messages) => [
-      ...messages,
-      { id: userMessageId, role: 'user', content: trimmedQuery },
-      { id: assistantMessageId, role: 'assistant', content: '', isStreaming: true },
-    ]);
-
-    try {
-      const token = await getToken();
-      const response = await fetch(`${API_BASE_URL}/groups/${groupId}/chat/stream`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ query: trimmedQuery }),
-      });
-
-      if (!response.ok) throw new Error('Failed to start chat');
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const chunks = buffer.split('\n\n');
-        buffer = chunks.pop() ?? '';
-        chunks.forEach((chunk) => {
-          if (!chunk.trim()) return;
-          const event = parseSseChunk(chunk);
-          const data = event.data ? JSON.parse(event.data) : {};
-          if (event.type === 'delta') {
-            setChatMessages((msgs) => msgs.map((m) => m.id === assistantMessageId ? { ...m, content: m.content + (data.text || '') } : m));
-          } else if (event.type === 'message' || event.type === 'done') {
-            setChatMessages((msgs) => msgs.map((m) => m.id === assistantMessageId ? { ...m, content: data.text || m.content } : m));
-          } else if (event.type === 'error') throw new Error(data.message || 'Stream error');
-        });
-      }
-    } catch (error) {
-      setChatError(error.message);
-    } finally {
-      setIsStreamingChat(false);
-      setChatMessages((msgs) => msgs.map((m) => m.id === assistantMessageId ? { ...m, isStreaming: false } : m));
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
     }
+    const trimmedInput = chatInput.trim();
+    if (!trimmedInput || isStreamingChat || documents.length === 0) return;
+    
+    await sendMessage({ text: trimmedInput });
+    setChatInput('');
   };
 
   return (
     <AuthGuard>
-      <div className="flex h-screen bg-background overflow-hidden relative selection:bg-primary/20">
+      <div className="fixed inset-0 flex bg-background overflow-hidden selection:bg-primary/20 z-50">
         {/* Sidebar Trigger (When collapsed) */}
         {isSidebarCollapsed && (
           <Button 
-            variant="ghost" 
+            variant="outline" 
             size="icon" 
-            className="absolute left-6 top-5 z-50 rounded-xl bg-background/90 backdrop-blur shadow-[0_10px_30px_rgba(0,0,0,0.1)] border border-primary/20 text-primary hover:bg-background hover:scale-110 active:scale-95 transition-all animate-in fade-in slide-in-from-left-4 duration-500"
+            className="absolute left-6 top-5 z-50 h-8 w-8 transition-transform"
             onClick={() => setIsSidebarCollapsed(false)}
           >
-            <PanelLeftOpen className="size-5" />
+            <PanelLeftOpen className="size-4 text-muted-foreground" />
           </Button>
         )}
 
         {/* Sidebar: Sources */}
-        <aside className={`border-r bg-muted/40 flex flex-col backdrop-blur-3xl transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${isSidebarCollapsed ? 'w-0 border-none opacity-0 invisible' : 'w-80 opacity-100 visible'}`}>
-          <div className="p-4 border-b bg-card/60 backdrop-blur-xl flex items-center justify-between">
-            <Button variant="ghost" size="icon" className="rounded-full bg-muted/20 hover:bg-muted/40 transition-all active:scale-90" asChild>
+        <aside className={`border-r bg-muted/10 flex flex-col transition-all duration-500 ease-in-out ${isSidebarCollapsed ? '-translate-x-full w-0 border-none opacity-0 invisible overflow-hidden' : 'translate-x-0 w-80 lg:w-[22rem] opacity-100 visible'} absolute md:relative z-40 h-full min-h-0 shrink-0`}>
+          <div className="p-4 border-b bg-card flex items-center justify-between">
+            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-muted/50 transition-colors" asChild>
                <Link href="/groups"><ArrowLeft className="size-4" /></Link>
             </Button>
-            <div className="flex-1 px-4 min-w-0">
-               <div className="flex items-center gap-2 text-[8px] font-black tracking-[0.2em] uppercase text-muted-foreground/40 mb-0.5">
-                  <span>Intelligence</span>
-                  <span className="opacity-40">/</span>
-                  <span className="text-primary/60 truncate max-w-[80px]">Research</span>
-               </div>
-               <h2 className="text-sm font-black truncate text-zinc-900 dark:text-zinc-100 uppercase tracking-tight leading-none pt-0.5">
+            <div className="flex-1 px-3 min-w-0">
+               <h2 className="text-sm font-semibold truncate text-zinc-900 dark:text-zinc-50 tracking-tight leading-none pt-0.5">
                 {isLoading ? <Skeleton className="h-4 w-24" /> : group?.title}
               </h2>
             </div>
             <Button 
               variant="ghost" 
               size="icon" 
-              className="rounded-full flex-shrink-0 hover:bg-muted/40 transition-all"
+              className="h-8 w-8 hover:bg-muted/50 transition-colors text-muted-foreground"
               onClick={() => setIsSidebarCollapsed(true)}
             >
-              <PanelLeft className="size-4 opacity-40" />
+              <PanelLeft className="size-4" />
             </Button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-5 space-y-8 scrollbar-none bg-[radial-gradient(circle_at_0%_0%,rgba(63,63,70,0.02),transparent_40%)]">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/40">Grounded Logic</h3>
-                <Badge variant="secondary" className="rounded-full text-[9px] font-black px-2 h-5 bg-primary/10 text-primary border-primary/5">{documents.length}</Badge>
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-6">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between px-1">
+                <h3 className="text-xs font-semibold text-muted-foreground">Source Documents</h3>
+                <Badge variant="secondary" className="px-1.5 py-0 h-4 text-[10px]">{documents.length}</Badge>
               </div>
 
               {!showAddSource ? (
                 <Button 
                   onClick={() => setShowAddSource(true)}
-                  className="w-full justify-start gap-3 rounded-2xl h-11 border-dashed border-2 bg-transparent hover:bg-muted/50 text-muted-foreground/60 hover:text-primary transition-all group ring-1 ring-primary/5 active:scale-95"
+                  className="w-full justify-start gap-2 h-9 border-dashed border bg-transparent hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
                   variant="outline"
+                  size="sm"
                 >
-                  <Plus className="size-4 group-hover:rotate-90 transition-transform duration-500" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Connect Source</span>
+                  <Plus className="size-3.5" />
+                  <span className="text-xs font-medium">Add Context</span>
                 </Button>
               ) : (
-                <Card className="rounded-[2rem] overflow-hidden border-primary/20 shadow-2xl animate-in fade-in slide-in-from-top-4 duration-700 bg-card/60 backdrop-blur-md">
-                  <div className="p-4 border-b bg-muted/40 flex items-center justify-between">
-                    <span className="text-[10px] font-black uppercase tracking-widest leading-none">New Context</span>
-                    <Button variant="ghost" size="icon" className="size-7 rounded-full hover:bg-destructive/10 hover:text-destructive transition-colors" onClick={() => setShowAddSource(false)}>
-                      <X className="size-4" />
+                <div className="rounded-xl overflow-hidden border border-border/50 bg-card shadow-sm">
+                  <div className="p-3 border-b bg-muted/30 flex items-center justify-between">
+                    <span className="text-xs font-semibold">New Source</span>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 rounded-md hover:bg-destructive/10 hover:text-destructive transition-colors" onClick={() => setShowAddSource(false)}>
+                      <X className="size-3.5" />
                     </Button>
                   </div>
-                  <div className="p-5 space-y-4">
-                    <Select value={linkForm.type} onChange={(e) => setLinkForm({ ...linkForm, type: e.target.value })} className="h-11 text-[10px] rounded-xl font-black uppercase tracking-widest bg-background/50">
-                      <option value="web">Web Access</option>
-                      <option value="youtube">YouTube Ground</option>
-                      <option value="file">Local Archive</option>
-                    </Select>
+                  <div className="p-4 space-y-3">
+                    <div className="flex p-1 bg-muted/40 rounded-lg gap-1 mb-2">
+                      {[
+                        { id: 'web', label: 'Web Page' },
+                        { id: 'youtube', label: 'YouTube' },
+                        { id: 'file', label: 'Local File' }
+                      ].map(t => (
+                        <button 
+                          key={t.id}
+                          onClick={() => setLinkForm({ ...linkForm, type: t.id })}
+                          className={`flex-1 py-1.5 text-[11px] font-semibold rounded-md transition-all ${linkForm.type === t.id ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
 
                     {linkForm.type === 'file' ? (
-                      <div className="space-y-4">
+                      <div className="space-y-3">
                          <div 
                            onClick={() => fileInputRef.current?.click()}
-                           className="w-full h-32 border-dashed border-2 rounded-2xl bg-muted/20 hover:bg-muted/40 cursor-pointer flex flex-col items-center justify-center gap-3 transition-all border-muted-foreground/20 hover:border-primary/40 group overflow-hidden relative"
+                           className="w-full h-28 mx-auto border-dashed border-2 rounded-xl bg-muted/10 hover:bg-primary/5 cursor-pointer flex flex-col items-center justify-center gap-3 transition-all border-border/60 hover:border-primary/50 text-center px-4"
                          >
-                           <Upload className="size-6 text-muted-foreground/40 group-hover:text-primary group-hover:scale-110 transition-all duration-500" />
-                           <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 px-6 text-center leading-relaxed">
-                             {fileForm.file ? fileForm.file.name : 'Choose Archive\n(PDF/DOCX/TXT)'}
-                           </span>
-                           {fileForm.file && <div className="absolute inset-0 bg-primary/5 animate-pulse pointer-events-none" />}
+                           <div className="p-2 rounded-full bg-background border shadow-sm">
+                             <Upload className="size-4 text-muted-foreground" />
+                           </div>
+                           <div className="space-y-0.5">
+                             <span className="text-xs font-semibold text-foreground block w-full truncate px-2">
+                               {fileForm.file ? fileForm.file.name : 'Click or drag file to upload'}
+                             </span>
+                             {!fileForm.file && <span className="text-[10px] text-muted-foreground">PDF, DOCX, TXT up to 10MB</span>}
+                           </div>
                          </div>
                          <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.docx,.txt" onChange={handleFileSelection} />
                          {fileForm.file && (
-                           <Button onClick={handleSubmitFile} disabled={isSubmittingFile} className="w-full h-12 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-2xl shadow-primary/20 bg-primary active:scale-95 transition-all">
-                             {isSubmittingFile ? <LoaderCircle className="animate-spin mr-2" /> : <Upload className="size-4 mr-2" />}
-                             Ground to System
+                           <Button onClick={handleSubmitFile} disabled={isSubmittingFile} size="sm" className="w-full h-9 transition-all">
+                             {isSubmittingFile ? <Loader2 className="animate-spin mr-2 size-3.5" /> : <Upload className="size-3.5 mr-2" />}
+                             Upload File
                            </Button>
                          )}
                       </div>
                     ) : (
-                      <div className="space-y-4">
-                        <div className="relative group">
-                          <div className="absolute inset-0 rounded-xl ring-1 ring-primary/5 transition-all pointer-events-none" />
-                          <Input 
-                            name="sourceUrl" 
-                            placeholder="Resource URL (https://...)" 
-                            value={linkForm.sourceUrl} 
-                            onChange={handleLinkChange}
-                            className="h-12 text-xs rounded-xl bg-background/50 border-white/5 font-bold tracking-tight px-4 focus-visible:ring-0 transition-all outline-none"
-                          />
-                        </div>
-                        <div className="relative group">
-                          <div className="absolute inset-0 rounded-xl ring-1 ring-primary/5 transition-all pointer-events-none" />
-                          <Input 
-                            name="title" 
-                            placeholder="Custom Identifier (Optional)" 
-                            value={linkForm.title} 
-                            onChange={handleLinkChange}
-                            className="h-12 text-xs rounded-xl bg-background/50 border-white/5 font-bold tracking-tight px-4 focus-visible:ring-0 transition-all outline-none"
-                          />
-                        </div>
-                        <Button onClick={handleSubmitLink} disabled={isSubmittingLink} className="w-full h-12 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-2xl shadow-primary/20 bg-primary active:scale-95 transition-all">
-                          {isSubmittingLink ? <LoaderCircle className="animate-spin mr-2" /> : <Link2 className="size-4 mr-2" />}
-                          Synchronize Context
+                      <div className="space-y-3">
+                        <Input 
+                          name="sourceUrl" 
+                          placeholder="Valid URL (https://...)" 
+                          value={linkForm.sourceUrl} 
+                          onChange={handleLinkChange}
+                          className="h-9 text-xs bg-background"
+                        />
+                        <Input 
+                          name="title" 
+                          placeholder="Title (Optional)" 
+                          value={linkForm.title} 
+                          onChange={handleLinkChange}
+                          className="h-9 text-xs bg-background"
+                        />
+                        <Button onClick={handleSubmitLink} disabled={isSubmittingLink} size="sm" className="w-full h-9 transition-all">
+                          {isSubmittingLink ? <Loader2 className="animate-spin mr-2 size-3.5" /> : <Link2 className="size-3.5 mr-2" />}
+                          Add Link
                         </Button>
                       </div>
                     )}
                   </div>
-                </Card>
+                </div>
               )}
             </div>
 
-            <div className="space-y-3 pt-2">
+            <div className="space-y-2">
               {isLoading ? (
-                Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)
+                Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)
               ) : documents.length === 0 ? (
-                <div className="text-center py-16 px-6 border-2 border-dashed rounded-[2.5rem] bg-muted/5 opacity-40 flex flex-col gap-4 animate-in fade-in duration-1000">
-                   <div className="p-4 rounded-2xl bg-muted/20 w-fit mx-auto">
-                      <FileText className="size-8 opacity-20" />
+                <div className="text-center py-10 px-4 border border-dashed rounded-xl bg-muted/20 flex flex-col gap-3">
+                   <div className="p-3 rounded-lg bg-background border border-border/50 mx-auto">
+                      <FileText className="size-5 text-muted-foreground/60" />
                    </div>
-                   <div className="space-y-1">
-                      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-center">Empty Context</p>
-                      <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-widest">Grounding Required</p>
+                   <div className="space-y-0.5">
+                      <p className="text-xs font-semibold text-foreground">No sources added</p>
+                      <p className="text-[10px] text-muted-foreground">Add files or links to start</p>
                    </div>
                 </div>
               ) : documents.map((doc) => (
                 <div 
                   key={doc.id} 
-                  className="group flex items-start gap-4 p-5 rounded-[2rem] hover:bg-card/80 hover:shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-transparent hover:border-primary/10 transition-all duration-500 cursor-pointer relative overflow-hidden ring-1 ring-zinc-500/5 hover:ring-primary/20 active:scale-[0.98]"
+                  className="group flex items-start gap-3 p-3 rounded-xl hover:bg-card border border-transparent hover:border-border/50 transition-colors cursor-pointer"
                 >
-                  <div className="mt-0.5 p-3 rounded-2xl bg-primary/5 text-primary group-hover:scale-110 group-hover:rotate-6 transition-all duration-500 shadow-inner">
-                    {doc.type === 'youtube' ? <PlayCircle className="size-4" /> : doc.type === 'web' ? <Globe className="size-4" /> : <FileText className="size-4" />}
+                  <div className="mt-0.5 p-2 rounded-md bg-muted text-foreground">
+                    {doc.type === 'youtube' ? <PlayCircle className="size-3.5" /> : doc.type === 'web' ? <Globe className="size-3.5" /> : <FileText className="size-3.5" />}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h4 className="text-[13px] font-bold truncate leading-none text-zinc-900 dark:text-zinc-100 group-hover:text-primary transition-colors pr-2 tracking-tight">{doc.title}</h4>
-                    <div className="flex items-center gap-2 mt-3">
-                      <Badge variant={statusBadgeVariant[doc.status]} className="text-[8px] font-black px-2 h-4 uppercase tracking-tighter rounded-sm shadow-sm">
+                    <h4 className="text-xs font-medium truncate text-zinc-900 dark:text-zinc-100 pr-2 tracking-tight">{doc.title}</h4>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <Badge variant={statusBadgeVariant[doc.status]} className="text-[9px] font-medium px-1.5 py-0 h-4">
                         {doc.status}
                       </Badge>
-                      <span className="text-[9px] font-black text-muted-foreground/40 uppercase tracking-[0.2em]">{formatDocumentType(doc.type)}</span>
+                      <span className="text-[9px] text-muted-foreground">{formatDocumentType(doc.type)}</span>
                     </div>
-                  </div>
-                  <div className="absolute right-0 top-0 bottom-0 w-[3px] bg-primary scale-y-0 group-hover:scale-y-100 transition-transform duration-700" />
-                  
-                  {/* Backdrop Zap icon decoration */}
-                  <div className="absolute top-1/2 right-4 -translate-y-1/2 opacity-[0.03] rotate-12 scale-150 pointer-events-none group-hover:scale-[2] group-hover:rotate-45 transition-all duration-1000">
-                    <Zap className="size-20" />
                   </div>
                 </div>
               ))}
             </div>
           </div>
-          
-          <div className="p-5 border-t bg-muted/30 backdrop-blur-3xl">
-            <div className="flex items-center gap-4 group">
-              <div className="size-11 rounded-3xl bg-zinc-950 dark:bg-white flex items-center justify-center text-white dark:text-zinc-950 font-black text-sm shadow-2xl transition-transform group-hover:scale-110">
-                {group?.title?.[0]?.toUpperCase() || 'N'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-black uppercase tracking-[0.2em] truncate text-muted-foreground/60">Researcher Identity</p>
-                <p className="text-[10px] text-zinc-900 dark:text-zinc-100 font-black uppercase tracking-widest truncate pt-0.5">{group?.title} SYSTEM</p>
-              </div>
-            </div>
-          </div>
         </aside>
 
         {/* Main Content: Chat */}
-        <main className="flex-1 flex flex-col relative bg-card/[0.02] overflow-hidden">
+        <main className="flex-1 flex flex-col relative bg-background overflow-hidden w-full h-full min-h-0">
           {/* Main Header */}
-          <header className={`h-20 border-b bg-background/60 backdrop-blur-3xl flex items-center px-8 justify-between sticky top-0 z-10 transition-all duration-700`}>
-            <div className="flex items-center gap-8">
-              {!isSidebarCollapsed && (
-                <div className="relative">
-                   <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full opacity-50" />
-                   <Bot className="size-7 text-primary relative z-10 animate-pulse" />
-                </div>
-              )}
-              {isSidebarCollapsed && <div className="w-12" />} {/* Space for trigger button */}
+          <header className={`h-14 border-b bg-card/50 backdrop-blur-md flex items-center px-6 justify-between sticky top-0 z-10 transition-all`}>
+            <div className="flex items-center gap-3">
+              {isSidebarCollapsed && <div className="w-8" />} {/* Space for trigger button */}
               <div>
-                <h1 className="text-sm font-black uppercase tracking-[0.4em] text-zinc-900 dark:text-zinc-100 leading-none">Intelligence Core</h1>
-                <p className="text-[10px] text-muted-foreground font-black uppercase tracking-[0.2em] mt-2 opacity-30">Grounded Logic Engine</p>
+                <h1 className="text-sm font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 leading-none">Intelligence Engine</h1>
+                <p className="text-[10px] text-muted-foreground mt-1">Ground logic enabled</p>
               </div>
             </div>
-            <div className="flex items-center gap-4 pr-2">
-              <div className="hidden sm:flex items-center gap-2 mr-4">
-                 <div className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                 <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500/80">Stream Active</span>
-              </div>
-              <Badge variant="outline" className="rounded-full bg-background/50 border-white/5 px-4 py-1.5 font-black text-[10px] uppercase tracking-widest shadow-sm ring-1 ring-primary/10">
-                {isStreamingChat ? (
-                  <span className="flex items-center gap-2 text-primary">
-                    <LoaderCircle className="size-3 animate-spin" /> Analyzing Source Context
-                  </span>
-                ) : 'System Active'}
-              </Badge>
+            <div className="flex items-center gap-3">
+              {isStreamingChat ? (
+                <div className="flex flex-row items-center gap-2">
+                   <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                   <span className="text-xs text-muted-foreground hidden sm:inline-block">Thinking...</span>
+                </div>
+              ) : (
+                <Badge variant="outline" className="rounded-full bg-background/50 border-border/50 px-3 py-0.5 font-medium text-[10px]">
+                  Ready
+                </Badge>
+              )}
             </div>
           </header>
 
           {/* Chat Feed */}
           <div 
             ref={chatViewportRef}
-            className="flex-1 overflow-y-auto px-6 py-12 md:px-10 scroll-smooth scrollbar-none"
+            className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-8 md:px-8 scroll-smooth"
           >
-            <div className="max-w-4xl mx-auto space-y-24 pb-48">
+            <div className="max-w-5xl mx-auto space-y-10 pb-44">
               {chatMessages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-12 mt-32 opacity-80 animate-in fade-in zoom-in duration-1000">
-                  <div className="relative group">
-                    <div className="absolute inset-0 bg-primary/10 blur-3xl rounded-full scale-150 animate-pulse" />
-                    <div className="p-12 rounded-[4rem] bg-card/60 backdrop-blur-md border-2 border-dashed border-primary/20 shadow-inner relative z-10 transition-transform duration-700 group-hover:scale-110">
-                      <Bot className="size-24 text-primary/40 group-hover:text-primary/60 transition-colors" />
-                    </div>
+                <div className="flex flex-col items-center justify-center gap-6 mt-20 md:mt-32">
+                  <div className="p-6 rounded-2xl bg-muted/20 border border-dashed border-border/50 shadow-sm">
+                    <Bot className="size-12 text-muted-foreground/50" />
                   </div>
-                  <div className="text-center space-y-4">
-                    <h2 className="text-4xl font-black tracking-tighter uppercase text-zinc-900 dark:text-zinc-100">Establish Grounding</h2>
-                    <p className="text-sm font-bold text-muted-foreground max-w-sm mx-auto uppercase tracking-widest opacity-60 leading-relaxed">Ask questions based strictly on your synchronized source identity.</p>
+                  <div className="text-center space-y-2">
+                    <h2 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">Ask your workspace</h2>
+                    <p className="text-sm text-muted-foreground max-w-sm mx-auto">Get answers based strictly on the source documents you provide.</p>
                   </div>
                 </div>
               ) : (
                 chatMessages.map((msg, idx) => (
+                  (() => {
+                    const messageText = getMessageText(msg);
+                    const messageCitations = msg.role === 'assistant'
+                      ? getMessageCitations(msg, messageText)
+                      : [];
+                    const fallbackStreamingText = (!messageText && isStreamingChat && msg.role === 'assistant' && idx === chatMessages.length - 1) ? '...' : '';
+
+                    return (
                   <div 
                     key={msg.id || idx} 
-                    className={`flex gap-8 md:gap-12 animate-in fade-in slide-in-from-bottom-12 duration-700`}
+                    className={`flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                   >
-                    <div className="flex-shrink-0 pt-1">
-                      <div className={`size-14 rounded-[1.8rem] flex items-center justify-center transition-all hover:scale-110 active:scale-95 shadow-2xl ${
-                        msg.role === 'user' 
-                        ? 'bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 shadow-zinc-500/20 ring-4 ring-zinc-500/5' 
-                        : 'bg-primary/10 text-primary border border-primary/10 shadow-primary/10 ring-4 ring-primary/5'
-                      }`}>
-                        {msg.role === 'user' ? <User className="size-6" /> : <Bot className="size-7" />}
-                      </div>
+                    <div className="flex items-center gap-2 mb-1 px-1">
+                       {msg.role === 'user' ? (
+                          <span className="text-xs font-semibold text-muted-foreground">You</span>
+                       ) : (
+                          <>
+                            <Bot className="size-3.5 text-primary" />
+                            <span className="text-xs font-semibold">Agent</span>
+                          </>
+                       )}
                     </div>
-                    <div className="flex-1 space-y-5 min-w-0">
-                      <div className="flex items-center gap-6">
-                        <span className={`text-[11px] font-black uppercase tracking-[0.4em] ${msg.role === 'user' ? 'text-zinc-900 dark:text-zinc-100' : 'text-primary'}`}>
-                          {msg.role === 'user' ? 'Researcher' : 'Intelligence Agent'}
-                        </span>
-                        {msg.isStreaming && <LoaderCircle className="size-4 animate-spin text-primary opacity-60" />}
-                        <div className="h-px flex-1 bg-border/40" />
-                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 italic">Protocol v1.0</span>
-                      </div>
-                      <div className={`text-zinc-800 dark:text-zinc-100 leading-9 font-medium text-lg tracking-tight selection:bg-primary/30`}>
+                    <div className={`px-7 py-5 rounded-3xl text-[16px] leading-relaxed max-w-[96%] sm:max-w-[92%] shadow-md ${
+                      msg.role === 'user' 
+                      ? 'bg-primary text-primary-foreground font-sans rounded-tr-sm' 
+                      : 'bg-background border border-border/60 rounded-tl-sm text-foreground font-serif text-[18px] leading-8 pt-6 pb-7'
+                    }`}>
+                      {msg.role === 'assistant' ? (
+                        <div className="space-y-3 leading-relaxed">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              h1: ({ children }) => <h1 className="text-lg font-semibold mt-1 mb-2">{children}</h1>,
+                              h2: ({ children }) => <h2 className="text-base font-semibold mt-1 mb-2">{children}</h2>,
+                              h3: ({ children }) => <h3 className="text-sm font-semibold mt-1 mb-2">{children}</h3>,
+                              p: ({ children }) => <p className="whitespace-pre-wrap">{children}</p>,
+                              ul: ({ children }) => <ul className="list-disc pl-5 space-y-1">{children}</ul>,
+                              ol: ({ children }) => <ol className="list-decimal pl-5 space-y-1">{children}</ol>,
+                              li: ({ children }) => <li>{children}</li>,
+                              strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                              em: ({ children }) => <em className="italic">{children}</em>,
+                              blockquote: ({ children }) => (
+                                <blockquote className="border-l-2 border-border pl-3 text-muted-foreground">{children}</blockquote>
+                              ),
+                              a: ({ href, children }) => (
+                                <a href={href} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">
+                                  {children}
+                                </a>
+                              ),
+                              code: ({ className, children }) => {
+                                const isBlock = className?.includes('language-');
+                                if (isBlock) {
+                                  return (
+                                    <code className="block overflow-x-auto rounded-md bg-muted px-3 py-2 text-xs font-mono">
+                                      {children}
+                                    </code>
+                                  );
+                                }
+
+                                return <code className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">{children}</code>;
+                              },
+                              pre: ({ children }) => <pre className="overflow-x-auto rounded-md bg-muted p-0">{children}</pre>,
+                            }}
+                          >
+                            {messageText || fallbackStreamingText}
+                          </ReactMarkdown>
+                        </div>
+                      ) : (
                         <p className="whitespace-pre-wrap">
-                          {msg.content || (msg.isStreaming ? '...' : '')}
+                          {formatCitations(messageText || fallbackStreamingText)}
                         </p>
-                      </div>
-                      {msg.role === 'assistant' && !msg.isStreaming && (
-                         <div className="pt-6 flex flex-wrap items-center gap-3">
-                            <Button variant="ghost" size="sm" className="h-9 rounded-2xl px-5 text-[10px] font-black uppercase tracking-widest bg-muted/20 hover:bg-primary/10 hover:text-primary transition-all active:scale-95 border border-white/5">
-                               <ShieldCheck className="size-3.5 mr-2 opacity-60" />
-                               Cite Protocol
-                            </Button>
-                            <Button variant="ghost" size="sm" className="h-9 rounded-2xl px-5 text-[10px] font-black uppercase tracking-widest bg-muted/20 hover:bg-primary/10 hover:text-primary transition-all active:scale-95 border border-white/5">
-                               <Zap className="size-3.5 mr-2 opacity-60" />
-                               Verify Logic
-                            </Button>
-                         </div>
+                      )}
+
+                      {msg.role === 'assistant' && messageCitations.length > 0 && (
+                        <div className="mt-5 pt-4 border-t border-border/50 space-y-2">
+                          <p className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground font-sans font-semibold">
+                            Sources Used
+                          </p>
+                          <div className="flex flex-wrap gap-2 font-sans">
+                            {messageCitations.map((citation, citationIdx) => (
+                              <span
+                                key={`${msg.id || idx}-cite-${citationIdx}`}
+                                className="inline-flex items-center rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-[11px] leading-none text-foreground"
+                                title={citation}
+                              >
+                                {citation}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>
+                    );
+                  })()
                 ))
               )}
 
               {chatError && (
-                <div className="p-8 rounded-[2.5rem] bg-destructive/10 border-2 border-destructive/20 text-destructive text-sm font-black flex items-center gap-6 animate-in shake-in shadow-2xl shadow-destructive/10 relative overflow-hidden">
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgba(var(--destructive),0.05),transparent)]" />
-                  <div className="p-4 rounded-2xl bg-destructive/20 relative z-10">
-                     <AlertTriangle className="size-7" />
-                  </div>
-                  <div className="space-y-1 relative z-10">
-                    <p className="uppercase tracking-[0.3em] font-black text-xs mb-1">Transmission Failure</p>
-                    <p className="opacity-80 tracking-tight">{chatError}</p>
-                  </div>
+                <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium flex items-center gap-4 mt-8">
+                  <AlertTriangle className="size-5" />
+                  <p>{chatError}</p>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Floating Chat Input */}
-          <div className="absolute bottom-0 left-0 right-0 p-10 bg-gradient-to-t from-background via-background/95 to-transparent pointer-events-none">
-            <div className={`max-w-4xl mx-auto pointer-events-auto transition-all duration-1000 delay-300 animate-in slide-in-from-bottom-16`}>
+          {/* Chat Input */}
+          <div className="absolute bottom-6 left-0 right-0 px-4 pointer-events-none z-40">
+            <div className="max-w-3xl mx-auto pointer-events-auto relative">
+              {/* Optional glowing effect behind the floating box */}
+              <div className="absolute -inset-1 bg-gradient-to-r from-primary/10 via-background/50 to-primary/10 rounded-[2.5rem] blur-lg -z-10 pointer-events-none" />
               <form 
                 onSubmit={handleSubmitChat}
-                className="relative flex items-end gap-5 p-5 rounded-[3rem] bg-white/90 dark:bg-zinc-900/90 border border-white/10 shadow-[0_40px_100px_rgba(0,0,0,0.3)] dark:shadow-[0_40px_100px_rgba(0,0,0,0.6)] backdrop-blur-3xl group transition-all duration-700 overflow-hidden"
+                className="relative flex items-end p-2 bg-background/80 backdrop-blur-2xl border-2 border-border/40 shadow-2xl rounded-3xl focus-within:ring-4 focus-within:ring-primary/10 focus-within:border-primary/50 transition-all font-sans"
               >
-                <div className="flex-1 relative pb-1">
+                <div className="flex-1 relative min-w-0">
                   <textarea
                     rows={1}
-                    value={chatQuery}
-                    onChange={(e) => setChatQuery(e.target.value)}
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
                         handleSubmitChat(e);
                       }
                     }}
-                    placeholder="Engage with grounded research context..."
-                    className="w-full bg-transparent border-none focus:ring-0 placeholder:text-muted-foreground/30 px-6 pt-5 pb-3 resize-none h-[64px] max-h-56 text-lg font-bold tracking-tight leading-relaxed selection:bg-primary/20"
+                    placeholder="Message the intelligence engine..."
+                    className="w-full bg-transparent border-none focus:ring-0 placeholder:text-muted-foreground/60 px-5 py-3.5 resize-none min-h-[52px] max-h-[160px] text-[16px] outline-none tracking-tight"
                     disabled={isStreamingChat}
                   />
                 </div>
-                <Button 
-                  type="submit" 
-                  size="icon" 
-                  disabled={isStreamingChat || !chatQuery.trim()}
-                  className="size-16 rounded-[2rem] shadow-2xl shadow-primary/30 transition-all hover:scale-110 active:scale-90 bg-primary hover:bg-primary/90 flex-shrink-0 ring-4 ring-primary/10 mb-1"
-                >
-                  {isStreamingChat ? <LoaderCircle className="size-7 animate-spin" /> : <Send className="size-6" />}
-                </Button>
                 
-                {/* Status Indicator inside input */}
-                <div className="absolute top-0 right-0 p-4 opacity-0 group-focus-within:opacity-100 transition-opacity">
-                   <div className="flex items-center gap-2">
-                       <span className="text-[9px] font-black uppercase tracking-widest text-primary/60">Grounded Mode</span>
-                       <div className="size-1.5 rounded-full bg-primary animate-pulse" />
-                   </div>
-                </div>
-
-                {/* Visual Accent */}
-                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-primary/30 to-transparent opacity-0 group-focus-within:opacity-100 transition-opacity" />
+                {(() => {
+                  const hasInput = chatInput.trim().length > 0;
+                  const hasDocs = documents.length > 0;
+                  const canSend = !isStreamingChat && hasInput && hasDocs;
+                  
+                  return (
+                    <div className="pl-3 pr-2 pb-2 shrink-0 z-10 flex items-center justify-center">
+                      <Button 
+                        type="submit" 
+                        disabled={!canSend}
+                        size="icon" 
+                        className={`size-[38px] rounded-full flex-shrink-0 transition-all duration-300 ${
+                          canSend 
+                            ? 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg hover:-translate-y-0.5' 
+                            : 'bg-muted text-muted-foreground opacity-50'
+                        }`}
+                      >
+                        {isStreamingChat ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                      </Button>
+                    </div>
+                  );
+                })()}
               </form>
-              <div className="flex justify-center flex-wrap gap-x-10 gap-y-2 mt-6">
-                 <div className="flex items-center gap-3 opacity-20">
-                    <ShieldCheck className="size-3 text-primary" />
-                    <p className="text-[9px] text-muted-foreground font-black uppercase tracking-[0.4em]">
-                      AI Integrity Guard
-                    </p>
-                 </div>
-                 <div className="h-px w-10 bg-muted-foreground/10 self-center hidden sm:block" />
-                 <div className="flex items-center gap-3 opacity-20">
-                    <Zap className="size-3 text-primary" />
-                    <p className="text-[9px] text-muted-foreground font-black uppercase tracking-[0.4em]">
-                      Grounded Synchronicity
-                    </p>
-                 </div>
-              </div>
             </div>
           </div>
         </main>
@@ -606,7 +748,3 @@ export default function GroupDetailPage() {
     </AuthGuard>
   );
 }
-
-// Fixed missing ShieldCheck import
-import { ShieldCheck as ShieldCheckIcon } from 'lucide-react';
-const ShieldCheck = ShieldCheckIcon;

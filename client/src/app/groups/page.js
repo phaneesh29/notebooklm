@@ -9,9 +9,7 @@ import {
   LoaderCircle,
   Plus, 
   Search, 
-  Sparkles, 
   Trash2, 
-  Zap 
 } from 'lucide-react';
 
 import AuthGuard from '@/components/AuthGuard';
@@ -83,98 +81,90 @@ export default function GroupsPage() {
 
   return (
     <AuthGuard>
-      <div className="flex-1 flex flex-col pt-6 pb-12 px-4 sm:px-8 max-w-7xl mx-auto w-full gap-8 animate-in fade-in duration-1000 bg-[radial-gradient(circle_at_50%_0%,rgba(63,63,70,0.03),transparent_40%)]">
+      <div className="flex-1 flex flex-col pt-6 pb-12 px-4 sm:px-8 max-w-6xl mx-auto w-full gap-8 animate-in fade-in duration-500">
         <header className="flex flex-col gap-6">
           <div className="flex items-center gap-4">
-             <Button variant="ghost" size="icon" className="rounded-full bg-muted/20 hover:bg-muted/40 transition-all active:scale-90" asChild>
+             <Button variant="outline" size="icon" className="h-9 w-9 rounded-full shadow-sm" asChild>
                 <Link href="/"><ArrowLeft className="size-4" /></Link>
              </Button>
              <div className="flex flex-col">
-               <div className="flex items-center gap-2 text-[10px] font-black tracking-[0.2em] uppercase text-muted-foreground/40 mb-1">
-                  <span className="hover:text-primary transition-colors cursor-pointer">Intelligence</span>
+               <div className="flex items-center gap-2 text-xs font-sans font-medium text-muted-foreground mb-1 uppercase tracking-wider">
+                  <span className="text-primary hover:underline cursor-pointer">Intelligence</span>
                   <span className="opacity-40">/</span>
-                  <span className="text-primary/60">Workspaces</span>
+                  <span>Workspaces</span>
                </div>
-               <h1 className="text-4xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">Workspaces</h1>
+               <h1 className="text-4xl font-serif font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">Workspaces</h1>
              </div>
           </div>
           
-          <div className="flex flex-wrap items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-700">
-             <div className="relative flex-1 min-w-[280px] group">
-                <div className="absolute inset-0 rounded-full ring-1 ring-primary/5 transition-all pointer-events-none shadow-sm" />
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+          <div className="flex flex-wrap items-center gap-4">
+             <div className="relative flex-1 min-w-[280px]">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                 <Input 
                    placeholder="Search notebooks..." 
-                   className="pl-11 h-12 rounded-full bg-background/50 backdrop-blur-sm border-white/5 focus-visible:ring-0 focus-visible:shadow-[0_0_20px_rgba(var(--primary),0.05)] transition-all font-bold tracking-tight text-sm outline-none" 
+                   className="pl-10 h-10 bg-background border-border" 
                    value={search}
                    onChange={(e) => setSearch(e.target.value)}
                 />
              </div>
              
-             <form onSubmit={handleCreateGroup} className="flex items-center gap-3 group">
-                <div className="relative group">
-                  <div className="absolute inset-0 rounded-full ring-1 ring-primary/10 transition-all pointer-events-none shadow-sm" />
-                  <Input 
-                    placeholder="New workspace title" 
-                    className="h-12 rounded-full bg-background/50 backdrop-blur-sm border-white/5 focus-visible:ring-0 w-56 sm:w-72 font-bold tracking-tight text-sm px-6 outline-none"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                  />
-                </div>
-                <Button type="submit" size="icon" className="h-12 w-12 rounded-full shadow-2xl shadow-primary/20 hover:scale-110 active:scale-90 transition-all bg-primary ring-4 ring-primary/10" disabled={isCreating}>
-                  {isCreating ? <LoaderCircle className="animate-spin" /> : <Plus className="size-5" />}
+             <form onSubmit={handleCreateGroup} className="flex items-center gap-3">
+                <Input 
+                  placeholder="New workspace title" 
+                  className="h-10 bg-background border-border w-56 sm:w-64"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+                <Button type="submit" className="h-10 shadow-sm transition-all" disabled={isCreating}>
+                  {isCreating ? <LoaderCircle className="animate-spin size-4" /> : <Plus className="size-4 mr-2" />}
+                  {isCreating ? 'Creating...' : 'Create'}
                 </Button>
              </form>
           </div>
         </header>
 
-        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
            {isLoading ? (
-             Array(6).fill(0).map((_, i) => <Skeleton key={i} className="h-52 rounded-[3rem]" />)
+             Array(6).fill(0).map((_, i) => <Skeleton key={i} className="h-44 rounded-2xl bg-muted/40" />)
            ) : filteredGroups.length === 0 ? (
-             <div className="col-span-full py-32 flex flex-col items-center justify-center gap-8 bg-muted/5 border-2 border-dashed border-zinc-500/10 rounded-[3rem] opacity-60">
-                <div className="p-8 rounded-[2rem] bg-background shadow-[0_20px_50px_rgba(0,0,0,0.05)] ring-1 ring-zinc-500/5">
-                  <FolderKanban className="size-16 text-muted-foreground/30" />
+             <div className="col-span-full py-28 flex flex-col items-center justify-center gap-5 bg-gradient-to-b from-transparent to-muted/20 border-border/40 rounded-2xl">
+                <div className="p-4 rounded-xl bg-background/50 border border-border shadow-sm backdrop-blur-sm">
+                  <FolderKanban className="size-8 text-muted-foreground/60" />
                 </div>
                 <div className="text-center space-y-2">
-                   <h2 className="text-2xl font-black uppercase tracking-tight">System Empty</h2>
-                   <p className="text-sm font-medium text-muted-foreground">Add a workspace to initiate research grounded intelligence.</p>
+                   <h2 className="text-xl font-serif font-medium tracking-tight">System Empty</h2>
+                   <p className="text-sm font-sans text-muted-foreground max-w-sm">Add a workspace to initiate research grounded intelligence.</p>
                 </div>
              </div>
            ) : (
              filteredGroups.map((g) => (
-               <Card key={g.id} className="rounded-[3rem] group hover:shadow-[0_40px_80px_rgba(0,0,0,0.1)] transition-all duration-700 hover:-translate-y-2 bg-card/60 backdrop-blur-md border-white/10 overflow-hidden relative shadow-sm ring-1 ring-zinc-500/5 hover:ring-primary/20">
-                  <Link href={`/group/${g.id}`} className="block">
-                    <CardHeader className="p-8 pb-4">
-                       <div className="flex items-center justify-between mb-4">
-                          <div className="p-4 rounded-[1.2rem] bg-primary/10 text-primary shadow-inner transition-transform group-hover:scale-110">
-                             <FolderKanban className="size-6" />
-                          </div>
-                          <Badge variant="outline" className="rounded-full bg-background/80 border-white/20 text-[10px] font-black px-3 py-1 uppercase tracking-widest text-muted-foreground/60">
-                             Notebook
-                          </Badge>
-                       </div>
-                       <CardTitle className="text-2xl font-black tracking-tighter group-hover:text-primary transition-colors mb-1">{g.title}</CardTitle>
-                       <CardDescription className="text-[10px] font-mono uppercase tracking-[0.2em] opacity-40 group-hover:opacity-60 transition-opacity">{g.id}</CardDescription>
-                    </CardHeader>
+               <Card key={g.id} className="group hover:-translate-y-1 hover:shadow-lg transition-all duration-300 bg-card border border-border/40 relative flex flex-col min-h-[200px] rounded-2xl overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+                  <Link href={`/group/${g.id}`} className="flex-1 block p-6 pb-2 relative z-10">
+                     <div className="flex items-start justify-between mb-4">
+                        <div className="p-2 rounded-md bg-primary/10 text-primary">
+                           <FolderKanban className="size-5" />
+                        </div>
+                        <Badge variant="secondary" className="text-[10px] font-medium px-2 py-0 h-5">
+                           Notebook
+                        </Badge>
+                     </div>
+                     <CardTitle className="text-xl font-serif font-semibold tracking-tight transition-colors">{g.title}</CardTitle>
+                     <CardDescription className="text-[11px] font-sans font-medium text-muted-foreground truncate opacity-60 mt-1 uppercase tracking-widest">{g.id.split('-')[0]}</CardDescription>
                   </Link>
-                  <CardContent className="px-8 pb-8 pt-0 mt-6 flex justify-between items-center bg-gradient-to-t from-muted/20 to-transparent">
-                     <span className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-[0.3em] italic">
+                  <div className="px-6 pb-4 pt-4 flex justify-between items-center mt-auto border-t border-border/30 z-10">
+                     <span className="text-[10px] font-medium text-muted-foreground">
                        Ground Ready
                      </span>
                      <Button 
                        variant="ghost" 
                        size="icon" 
-                       className="size-11 rounded-2xl text-zinc-300 hover:text-destructive hover:bg-destructive/10 transition-all active:scale-90"
+                       className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                        disabled={deletingId === g.id}
-                       onClick={() => handleDeleteGroup(g.id)}
+                       onClick={(e) => { e.preventDefault(); handleDeleteGroup(g.id); }}
                      >
                        <Trash2 className="size-4" />
                      </Button>
-                  </CardContent>
-                  {/* Decorative background element */}
-                  <div className="absolute -bottom-10 -right-10 p-16 opacity-[0.02] pointer-events-none rotate-12 transition-transform duration-1000 group-hover:rotate-45 group-hover:scale-125">
-                    <Zap className="size-48" />
                   </div>
                </Card>
              ))

@@ -14,6 +14,7 @@ const env = {
   qdrantUrl: process.env.QDRANT_URL || 'http://localhost:6333',
   qdrantCollectionName: process.env.QDRANT_COLLECTION_NAME || 'document_chunks',
   qdrantVectorSize: parseInt(process.env.QDRANT_VECTOR_SIZE || '3072', 10),
+  geminiEmbeddingModel: process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001',
 };
 
 export default env;

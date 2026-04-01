@@ -5,5 +5,5 @@ export const streamGroupChatParamsSchema = z.object({
 });
 
 export const streamGroupChatBodySchema = z.object({
-  query: z.string().trim().min(1).max(4000),
+  messages: z.array(z.any()).min(1),
 });

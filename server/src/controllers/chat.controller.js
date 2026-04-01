@@ -1,22 +1,90 @@
 import httpStatus from 'http-status';
-import { StreamingMode } from '@google/adk';
 import { getAuth } from '@clerk/express';
-import { createChatRunner, CHAT_AGENT_NAME } from '../lib/google-adk.js';
 import { streamGroupChatBodySchema, streamGroupChatParamsSchema } from '../schemas/chat.schema.js';
 import { assertGroupAccess } from '../services/group.service.js';
 import { getAuthenticatedUser } from '../services/user.service.js';
-import {
-  appendChatHistoryToSession,
-  createChatSession,
-  deleteChatSession,
-  extractTextDelta,
-  isAssistantTextEvent,
-  isFinalResponse,
-  listRecentChatMessages,
-  persistChatTurn,
-} from '../services/chat.service.js';
+import { listRecentChatMessages, persistChatTurn } from '../services/chat.service.js';
 import ApiError from '../utils/ApiError.js';
 import { validateWithSchema } from '../utils/validateSchema.js';
+import { stepCountIs, streamText } from 'ai';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import env from '../config/env.js';
+import { getRetrievalTool } from '../lib/retrieval.tool.js';
+
+const extractMessageText = (message) => {
+  if (typeof message?.content === 'string') {
+    return message.content.trim();
+  }
+
+  if (Array.isArray(message?.parts)) {
+    return message.parts
+      .filter((part) => part?.type === 'text' && typeof part?.text === 'string')
+      .map((part) => part.text)
+      .join('\n')
+      .trim();
+  }
+
+  return '';
+};
+
+const normalizeToModelMessages = (messages) => {
+  if (!Array.isArray(messages)) return [];
+
+  return messages
+    .map((message) => ({
+      role: message?.role,
+      content: extractMessageText(message),
+    }))
+    .filter((message) => (
+      (message.role === 'user' || message.role === 'assistant' || message.role === 'system')
+      && message.content.length > 0
+    ));
+};
+
+const normalizeCitationLabel = (value) => {
+  const label = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!label) return '';
+  return label.length > 120 ? `${label.slice(0, 117)}...` : label;
+};
+
+const collectCitationTitles = (value, collector) => {
+  if (!value) return;
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectCitationTitles(item, collector));
+    return;
+  }
+
+  if (typeof value === 'object') {
+    if (typeof value.title === 'string') {
+      const label = normalizeCitationLabel(value.title);
+      if (label) collector.add(label);
+    }
+
+    if (Array.isArray(value.snippets)) {
+      value.snippets.forEach((snippet) => {
+        if (typeof snippet?.title === 'string') {
+          const label = normalizeCitationLabel(snippet.title);
+          if (label) collector.add(label);
+        }
+      });
+    }
+
+    Object.values(value).forEach((nestedValue) => collectCitationTitles(nestedValue, collector));
+  }
+};
+
+const collectInlineCitationsFromText = (text, collector) => {
+  if (typeof text !== 'string' || text.length === 0) return;
+
+  const citationRegex = /\[(?:Document:\s*)?([^\]]+)\]/g;
+  let match;
+
+  while ((match = citationRegex.exec(text)) !== null) {
+    const label = normalizeCitationLabel(match[1]);
+    if (label) collector.add(label);
+  }
+};
 
 export const getGroupChats = async (req, res, next) => {
   try {
@@ -28,6 +96,7 @@ export const getGroupChats = async (req, res, next) => {
     const { groupId } = req.params;
     const user = await getAuthenticatedUser(clerkUserId);
     await assertGroupAccess({ groupId, userId: user.id });
+    const citationCollector = new Set();
 
     const history = await listRecentChatMessages({ groupId, userId: user.id, limit: 100 });
 
@@ -37,17 +106,7 @@ export const getGroupChats = async (req, res, next) => {
   }
 };
 
-const writeSse = (res, event, data) => {
-  res.write(`event: ${event}\n`);
-  res.write(`data: ${JSON.stringify(data)}\n\n`);
-  res.flush?.();
-};
-
 export const streamGroupChat = async (req, res, next) => {
-  let session;
-  let runner;
-  let user;
-
   try {
     const { userId: clerkUserId } = getAuth(req);
 
@@ -56,110 +115,64 @@ export const streamGroupChat = async (req, res, next) => {
     }
 
     const { groupId } = validateWithSchema(streamGroupChatParamsSchema, req.params);
-    const { query } = validateWithSchema(streamGroupChatBodySchema, req.body);
+    const { messages } = validateWithSchema(streamGroupChatBodySchema, req.body);
+    const uiMessages = Array.isArray(messages) ? messages : [];
+    const modelMessages = normalizeToModelMessages(messages);
+    const lastUserMessage = [...modelMessages].reverse().find((message) => message.role === 'user');
 
-    user = await getAuthenticatedUser(clerkUserId);
+    if (uiMessages.length === 0 || modelMessages.length === 0 || !lastUserMessage?.content) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'No valid chat messages provided');
+    }
+
+    const user = await getAuthenticatedUser(clerkUserId);
     await assertGroupAccess({ groupId, userId: user.id });
 
-    const history = await listRecentChatMessages({ groupId, userId: user.id });
+    const google = createGoogleGenerativeAI({ apiKey: req.geminiApiKey });
 
-    runner = createChatRunner(req.geminiApiKey);
-    session = await createChatSession({ runner, userId: user.id });
+    const result = streamText({
+      model: google(env.chatModel || 'gemini-1.5-pro'),
+      system: `You are a grounded assistant for a user's private document workspace.
 
-    await appendChatHistoryToSession({
-      runner,
-      session,
-      history,
-      agentName: CHAT_AGENT_NAME,
-    });
+Use the document_retrieval tool when the user asks about their uploaded files, resume/profile details, or any private facts.
+For greetings or general questions, answer directly without tools.
 
-    res.status(httpStatus.OK);
-    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache, no-transform');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no');
-    res.flushHeaders();
-
-    writeSse(res, 'start', {
-      groupId,
-      historyCount: history.length,
-    });
-
-    let clientDisconnected = false;
-    let responseText = '';
-
-    req.on('close', () => {
-      clientDisconnected = true;
-    });
-
-    for await (const event of runner.runAsync({
-      userId: user.id,
-      sessionId: session.id,
-      newMessage: {
-        role: 'user',
-        parts: [{ text: query }],
+Important:
+- After any tool call, always produce a final natural-language answer for the user.
+- Never expose raw tool payloads, JSON, or internal traces in the final answer.
+- If retrieval does not provide enough evidence, clearly say you cannot verify from uploaded documents and ask for clarification or additional files.
+- Do not invent projects, skills, or personal facts that are not supported by retrieved context.`,
+  messages: modelMessages,
+      tools: {
+        document_retrieval: getRetrievalTool({
+          apiKey: req.geminiApiKey,
+          userId: user.id,
+          groupId,
+          fallbackQuery: lastUserMessage.content,
+        }),
       },
-      runConfig: {
-        streamingMode: StreamingMode.SSE,
+      stopWhen: stepCountIs(6),
+      temperature: 0,
+      onStepFinish: (step) => {
+        if (!step || typeof step !== 'object') return;
+        collectCitationTitles(step, citationCollector);
       },
-    })) {
-      if (clientDisconnected) {
-        break;
+      onFinish: async ({ text }) => {
+        if (text) {
+          collectInlineCitationsFromText(text, citationCollector);
+
+          await persistChatTurn({
+            groupId,
+            userId: user.id,
+            query: lastUserMessage.content,
+            response: text,
+            citations: [...citationCollector],
+          });
+        }
       }
+    });
 
-      if (!isAssistantTextEvent({ event, agentName: CHAT_AGENT_NAME })) {
-        continue;
-      }
-
-      const { delta, nextAccumulatedText } = extractTextDelta({
-        event,
-        accumulatedText: responseText,
-      });
-
-      if (delta) {
-        responseText = nextAccumulatedText;
-        writeSse(res, 'delta', { text: delta });
-      } else if (!event.partial && nextAccumulatedText !== responseText) {
-        responseText = nextAccumulatedText;
-        writeSse(res, 'message', { text: responseText });
-      }
-
-      if (isFinalResponse(event)) {
-        break;
-      }
-    }
-
-    if (!clientDisconnected) {
-      await persistChatTurn({
-        groupId,
-        userId: user.id,
-        query,
-        response: responseText,
-      });
-
-      writeSse(res, 'done', {
-        text: responseText,
-      });
-    }
-
-    res.end();
+    result.pipeUIMessageStreamToResponse(res, { originalMessages: uiMessages });
   } catch (error) {
-    if (res.headersSent) {
-      writeSse(res, 'error', {
-        message: error.message || 'Failed to stream chat response',
-      });
-      res.end();
-      return;
-    }
-
     next(error);
-  } finally {
-    if (runner && session && user) {
-      await deleteChatSession({
-        runner,
-        userId: user.id,
-        sessionId: session.id,
-      }).catch(() => { });
-    }
   }
 };

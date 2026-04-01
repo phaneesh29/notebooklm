@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { apiRequest } from '@/lib/api';
 
-import { Bot, ExternalLink, KeyRound, ShieldCheck, Zap } from 'lucide-react';
+import { Bot, ExternalLink, KeyRound, LoaderCircle, ShieldCheck, Zap } from 'lucide-react';
 
 export default function OnboardingPage() {
   const [apiKey, setApiKey] = useState('');

@@ -16,8 +16,10 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "@ai-sdk/google": "^3.0.54",
     "@clerk/express": "^2.0.7",
-    "@google/adk": "^0.6.0",
+    "@qdrant/js-client-rest": "^1.17.0",
+    "ai": "^6.0.141",
     "bullmq": "^5.71.1",
     "compression": "^1.8.1",
     "cors": "^2.8.6",

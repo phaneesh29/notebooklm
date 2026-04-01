@@ -15,10 +15,14 @@ const env = {
   minioBucketName: process.env.MINIO_BUCKET_NAME || 'notebooklm-documents',
   clerkWebhookSecret: process.env.CLERK_WEBHOOK_SECRET,
   encryptionKey: process.env.ENCRYPTION_KEY || 'default-secret-do-not-use-in-prod',
-  chatModel: 'gemini-3.1-flash-lite-preview',
-  chatAgentName: 'chatAssistant',
-  chatAppName: 'notebooklm-chat',
-  chatHistoryTurnLimit: 5,
+  chatModel: process.env.CHAT_MODEL || 'gemini-3.1-flash-lite-preview',
+  chatAgentName: process.env.CHAT_AGENT_NAME || 'chatAssistant',
+  chatAppName: process.env.CHAT_APP_NAME || 'notebooklm-chat',
+  chatHistoryTurnLimit: parseInt(process.env.CHAT_HISTORY_TURN_LIMIT || '5', 10),
+  geminiEmbeddingModel: process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001',
+  qdrantUrl: process.env.QDRANT_URL || 'http://localhost:6333',
+  qdrantCollectionName: process.env.QDRANT_COLLECTION_NAME || 'document_chunks',
+  qdrantVectorSize: parseInt(process.env.QDRANT_VECTOR_SIZE || '3072', 10),
 };
 
 env.chatHistoryMessageLimit = env.chatHistoryTurnLimit * 2;
